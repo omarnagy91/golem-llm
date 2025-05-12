@@ -12,6 +12,7 @@ use golem_llm::{
     },
     LOGGING_STATE,
 };
+use golem_rust::wasm_rpc::Pollable;
 use log::trace;
 
 mod client;
@@ -151,8 +152,8 @@ impl Guest for OllamaComponent {
     fn send(messages: Vec<Message>, config: Config) -> ChatEvent {
         LOGGING_STATE.with_borrow_mut(|state| state.init());
 
-        let client = OllamaApi::new(config.model, config.base_url);
-        match messages_to_request(messages, config) {
+        let client = OllamaApi::new(config.model.clone(), None);
+        match messages_to_request(messages, config.clone()) {
             Ok(request) => Self::request(&client, request),
             Err(err) => ChatEvent::Error(err),
         }
@@ -164,16 +165,15 @@ impl Guest for OllamaComponent {
         config: Config,
     ) -> ChatEvent {
         LOGGING_STATE.with_borrow_mut(|state| state.init());
-
-        let client = OllamaApi::new(config.model, config.base_url);
-        match messages_to_request(messages, config) {
-            Ok(mut request) => Self::request(&client, request),
+        let client = OllamaApi::new(config.model.clone(), None);
+        match messages_to_request(messages, config.clone()) {
+            Ok(request) => Self::request(&client, request),
             Err(err) => ChatEvent::Error(err),
         }
     }
 
     fn stream(messages: Vec<Message>, config: Config) -> ChatStream {
-        ChatStream::new(Self::unwrapped_stream(messages, config))
+        ChatStream::new(Self::unwrapped_stream(messages, config.clone()))
     }
 }
 
@@ -181,8 +181,8 @@ impl ExtendedGuest for OllamaComponent {
     fn unwrapped_stream(messages: Vec<Message>, config: Config) -> LlmChatStream<OllamaChatStream> {
         LOGGING_STATE.with_borrow_mut(|state| state.init());
 
-        let client = OllamaApi::new(config.model, config.base_url);
-        match messages_to_request(messages, config) {
+        let client = OllamaApi::new(config.model.clone(), None);
+        match messages_to_request(messages, config.clone()) {
             Ok(request) => Self::streaming_request(&client, request),
             Err(err) => OllamaChatStream::failed(err),
         }
@@ -239,6 +239,10 @@ impl ExtendedGuest for OllamaComponent {
         });
 
         extended_messages
+    }
+
+    fn subscribe(stream: &Self::ChatStream) -> Pollable {
+        stream.subscribe()
     }
 }
 

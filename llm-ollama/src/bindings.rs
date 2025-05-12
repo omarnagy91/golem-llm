@@ -6,7 +6,7 @@
 use golem_llm::golem::llm::llm as __with_name0;
 #[cfg(target_arch = "wasm32")]
 #[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:golem:llm-openai@1.0.0:llm-library:encoded world"
+    link_section = "component-type:wit-bindgen:0.41.0:golem:llm-ollama@1.0.0:llm-library:encoded world"
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
@@ -42,8 +42,8 @@ message\x01-\0\x0ctool-request\x01+\0\x05error\x01/\0\x04\0\x0achat-event\x03\00
 ream.blocking-get-next\x01=\x01p\x10\x01@\x02\x08messages>\x06config$\01\x04\0\x04\
 send\x01?\x01o\x02\x14\x1b\x01p\xc0\0\x01@\x03\x08messages>\x0ctool-results\xc1\0\
 \x06config$\01\x04\0\x08continue\x01B\x01i8\x01@\x02\x08messages>\x06config$\0\xc3\
-\0\x04\0\x06stream\x01D\x04\0\x13golem:llm/llm@1.0.0\x05\0\x04\0\"golem:llm-open\
-ai/llm-library@1.0.0\x04\0\x0b\x11\x01\0\x0bllm-library\x03\0\0\0G\x09producers\x01\
+\0\x04\0\x06stream\x01D\x04\0\x13golem:llm/llm@1.0.0\x05\0\x04\0\"golem:llm-olla\
+ma/llm-library@1.0.0\x04\0\x0b\x11\x01\0\x0bllm-library\x03\0\0\0G\x09producers\x01\
 \x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]

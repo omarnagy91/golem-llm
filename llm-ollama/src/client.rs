@@ -1,17 +1,20 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, fs, path::Path};
 
+use base64::{engine::general_purpose, Engine};
 use golem_llm::{
     error::{error_code_from_status, from_event_source_error, from_reqwest_error},
     event_source::{error, EventSource},
     golem::llm::llm::{Error, ErrorCode},
 };
 use log::trace;
+use mime_guess::MimeGuess;
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client, Method, Response, StatusCode,
 };
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use url::Url;
 
 pub struct OllamaApi {
     default_model: String,
@@ -20,13 +23,13 @@ pub struct OllamaApi {
 }
 
 impl OllamaApi {
-    pub fn new(default_model: String, base_url: String) -> Self {
+    pub fn new(default_model: String, base_url: Option<String>) -> Self {
         let client = Client::builder()
             .build()
             .expect("Failed to initialize HTTP client");
         Self {
             default_model,
-            base_url,
+            base_url : if base_url.is_none() { "http://localhost:11434".to_string() } else { base_url.unwrap() },
             client,
         }
     }
