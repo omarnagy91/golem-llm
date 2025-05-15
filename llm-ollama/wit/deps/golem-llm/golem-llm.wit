@@ -102,7 +102,7 @@ interface llm {
     tools: list<tool-definition>,
     tool-choice: option<string>,
     provider-options: list<kv>,
-    base_url: option<string>,
+    base-url: option<string>,
   }
 
   // --- Usage / Metadata ---
@@ -160,7 +160,6 @@ interface llm {
   resource chat-stream {
     get-next: func() -> option<list<stream-event>>;
     blocking-get-next: func() -> list<stream-event>;
-    subscribe: func() -> pollable;
   }
 
   // --- Core Functions ---
