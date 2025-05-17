@@ -6,7 +6,7 @@ use base64::{engine::general_purpose, Engine as _};
 use golem_llm::error::error_code_from_status;
 use golem_llm::golem::llm::llm::{
     ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, ImageDetail, Message,
-    ResponseMetadata, Role, ToolCall, ToolDefinition, ToolResult, Usage,
+    ResponseMetadata, Role, ToolCall, ToolDefinition, ToolResult, Usage, ImageReference,
 };
 use reqwest::StatusCode;
 use std::collections::HashMap;
@@ -125,28 +125,32 @@ pub fn to_openai_role_name(role: Role) -> &'static str {
 pub fn content_part_to_inner_input_item(content_part: ContentPart) -> InnerInputItem {
     match content_part {
         ContentPart::Text(msg) => InnerInputItem::TextInput { text: msg },
-        ContentPart::Image(image_url) => InnerInputItem::ImageInput {
-            image_url: image_url.url,
-            detail: match image_url.detail {
-                Some(ImageDetail::Auto) => Detail::Auto,
-                Some(ImageDetail::Low) => Detail::Low,
-                Some(ImageDetail::High) => Detail::High,
-                None => Detail::default(),
+        ContentPart::Image(image_reference) => match image_reference {
+            ImageReference::Url(image_url) => InnerInputItem::ImageInput {
+                image_url: image_url.url,
+                detail: match image_url.detail {
+                    Some(ImageDetail::Auto) => Detail::Auto,
+                    Some(ImageDetail::Low) => Detail::Low,
+                    Some(ImageDetail::High) => Detail::High,
+                    None => Detail::default(),
+                },
             },
-        },
-        ContentPart::InlineImage(image_source) => {
-            let base64_data = general_purpose::STANDARD.encode(&image_source.data);
-            let mime_type = image_source
-                .mime_type
-                .unwrap_or_else(|| "image/png".to_string());
+            ImageReference::Inline(image_source) => {
+                let base64_data = general_purpose::STANDARD.encode(&image_source.data);
+                let mime_type = &image_source.mime_type; // This is already a string
+                let data_url = format!("data:{};base64,{}", mime_type, base64_data);
 
-            let data_url = format!("data:{};base64,{}", mime_type, base64_data);
-
-            InnerInputItem::ImageInput {
-                image_url: data_url,
-                detail: Detail::default(),
+                InnerInputItem::ImageInput {
+                    image_url: data_url,
+                    detail: match image_source.detail {
+                        Some(ImageDetail::Auto) => Detail::Auto,
+                        Some(ImageDetail::Low) => Detail::Low,
+                        Some(ImageDetail::High) => Detail::High,
+                        None => Detail::default(),
+                    },
+                }
             }
-        }
+        },
     }
 }
 

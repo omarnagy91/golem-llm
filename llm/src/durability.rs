@@ -105,7 +105,7 @@ mod durable_impl {
         ChatEvent, ChatStream, CompleteResponse, Config, ContentPart, Error, ErrorCode,
         FinishReason, Guest, GuestChatStream, ImageDetail, ImageSource, ImageUrl, Kv, Message,
         ResponseMetadata, Role, StreamDelta, StreamEvent, ToolCall, ToolDefinition, ToolFailure,
-        ToolResult, ToolSuccess, Usage,
+        ToolResult, ToolSuccess, Usage, ImageReference,
     };
     use golem_rust::bindings::golem::durability::durability::{
         DurableFunctionType, LazyInitializedPollable,
@@ -1012,18 +1012,14 @@ mod durable_impl {
 
     // variant content-part {
     //     text(string),
-    //     image(image-url),
-    //     inline-image(image-source),
+    //     image(image-reference),
     //   }
     impl IntoValue for ContentPart {
         fn add_to_builder<T: NodeBuilder>(self, builder: T) -> T::Result {
             match self {
                 ContentPart::Text(text) => builder.variant(0).string(&text).finish(),
-                ContentPart::Image(image_url) => {
-                    image_url.add_to_builder(builder.variant(1)).finish()
-                }
-                ContentPart::InlineImage(image_source) => {
-                    image_source.add_to_builder(builder.variant(2)).finish()
+                ContentPart::Image(image_reference) => {
+                    image_reference.add_to_builder(builder.variant(1)).finish()
                 }
             }
         }
@@ -1031,8 +1027,7 @@ mod durable_impl {
         fn add_to_type_builder<T: TypeNodeBuilder>(builder: T) -> T::Result {
             let mut builder = builder.variant();
             builder = builder.case("text").string();
-            builder = ImageUrl::add_to_type_builder(builder.case("image"));
-            builder = ImageSource::add_to_type_builder(builder.case("inline-image"));
+            builder = ImageReference::add_to_type_builder(builder.case("image"));
             builder.finish()
         }
     }
@@ -1052,13 +1047,53 @@ mod durable_impl {
                         .ok_or_else(|| "ContentPart::Text should be string".to_string())?
                         .to_string(),
                 )),
-                1 => Ok(ContentPart::Image(ImageUrl::from_extractor(
-                    &inner.ok_or_else(|| "Missing image url".to_string())?,
-                )?)),
-                2 => Ok(ContentPart::InlineImage(ImageSource::from_extractor(
-                    &inner.ok_or_else(|| "Missing inline image".to_string())?,
+                1 => Ok(ContentPart::Image(ImageReference::from_extractor(
+                    &inner.ok_or_else(|| "Missing image reference".to_string())?,
                 )?)),
                 _ => Err(format!("Invalid ContentPart variant: {idx}")),
+            }
+        }
+    }
+
+    // variant image-reference {
+    //   url(image-url),
+    //   inline(image-source),
+    // }
+    impl IntoValue for ImageReference {
+        fn add_to_builder<T: NodeBuilder>(self, builder: T) -> T::Result {
+            match self {
+                ImageReference::Url(image_url) => {
+                    image_url.add_to_builder(builder.variant(0)).finish()
+                }
+                ImageReference::Inline(image_source) => {
+                    image_source.add_to_builder(builder.variant(1)).finish()
+                }
+            }
+        }
+
+        fn add_to_type_builder<T: TypeNodeBuilder>(builder: T) -> T::Result {
+            let mut builder = builder.variant();
+            builder = ImageUrl::add_to_type_builder(builder.case("url"));
+            builder = ImageSource::add_to_type_builder(builder.case("inline"));
+            builder.finish()
+        }
+    }
+
+    impl FromValueAndType for ImageReference {
+        fn from_extractor<'a, 'b>(
+            extractor: &'a impl WitValueExtractor<'a, 'b>,
+        ) -> Result<Self, String> {
+            let (idx, inner) = extractor
+                .variant()
+                .ok_or_else(|| "ImageReference should be variant".to_string())?;
+            match idx {
+                0 => Ok(ImageReference::Url(ImageUrl::from_extractor(
+                    &inner.ok_or_else(|| "Missing image url".to_string())?,
+                )?)),
+                1 => Ok(ImageReference::Inline(ImageSource::from_extractor(
+                    &inner.ok_or_else(|| "Missing image source".to_string())?,
+                )?)),
+                _ => Err(format!("Invalid ImageReference variant: {idx}")),
             }
         }
     }
@@ -1136,20 +1171,23 @@ mod durable_impl {
 
     // record image-source {
     //   data: list<u8>,
-    //   mime-type: option<string>,
+    //   mime-type: string,
+    //   detail: option<image-detail>,
     // }
     impl IntoValue for ImageSource {
         fn add_to_builder<T: NodeBuilder>(self, builder: T) -> T::Result {
             let mut builder = builder.record();
             builder = self.data.add_to_builder(builder.item());
             builder = self.mime_type.add_to_builder(builder.item());
+            builder = self.detail.add_to_builder(builder.item());
             builder.finish()
         }
 
         fn add_to_type_builder<T: TypeNodeBuilder>(builder: T) -> T::Result {
             let mut builder = builder.record();
             builder = Vec::<u8>::add_to_type_builder(builder.field("data"));
-            builder = Option::<String>::add_to_type_builder(builder.field("mime-type"));
+            builder = builder.field("mime-type").string();
+            builder = Option::<ImageDetail>::add_to_type_builder(builder.field("detail"));
             builder.finish()
         }
     }
@@ -1164,10 +1202,15 @@ mod durable_impl {
                         .field(0)
                         .ok_or_else(|| "Missing data field".to_string())?,
                 )?,
-                mime_type: Option::<String>::from_extractor(
+                mime_type: String::from_extractor(
                     &extractor
                         .field(1)
                         .ok_or_else(|| "Missing mime-type field".to_string())?,
+                )?,
+                detail: Option::<ImageDetail>::from_extractor(
+                    &extractor
+                        .field(2)
+                        .ok_or_else(|| "Missing detail field".to_string())?,
                 )?,
             })
         }
@@ -1435,6 +1478,7 @@ mod durable_impl {
         use crate::golem::llm::llm::{
             ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason,
             ImageDetail, ImageSource, ImageUrl, Message, ResponseMetadata, Role, ToolCall, Usage,
+            ImageReference,
         };
         use golem_rust::value_and_type::{FromValueAndType, IntoValueAndType};
         use golem_rust::wasm_rpc::WitTypeNode;
@@ -1485,25 +1529,28 @@ mod durable_impl {
         fn image_source_roundtrip() {
             roundtrip_test(ImageSource {
                 data: vec![0, 1, 2, 3, 4, 5],
-                mime_type: Some("image/jpeg".to_string()),
+                mime_type: "image/jpeg".to_string(),
+                detail: Some(ImageDetail::High),
             });
             roundtrip_test(ImageSource {
                 data: vec![255, 254, 253, 252],
-                mime_type: None,
+                mime_type: "image/png".to_string(),
+                detail: None,
             });
         }
 
         #[test]
         fn content_part_roundtrip() {
             roundtrip_test(ContentPart::Text("Hello".to_string()));
-            roundtrip_test(ContentPart::Image(ImageUrl {
+            roundtrip_test(ContentPart::Image(ImageReference::Url(ImageUrl {
                 url: "https://example.com/image.png".to_string(),
                 detail: Some(ImageDetail::Low),
-            }));
-            roundtrip_test(ContentPart::InlineImage(ImageSource {
+            })));
+            roundtrip_test(ContentPart::Image(ImageReference::Inline(ImageSource {
                 data: vec![0, 1, 2, 3, 4, 5],
-                mime_type: Some("image/jpeg".to_string()),
-            }));
+                mime_type: "image/jpeg".to_string(),
+                detail: Some(ImageDetail::Auto),
+            })));
         }
 
         #[test]
@@ -1548,10 +1595,10 @@ mod durable_impl {
                 id: "response_id".to_string(),
                 content: vec![
                     ContentPart::Text("Hello".to_string()),
-                    ContentPart::Image(ImageUrl {
+                    ContentPart::Image(ImageReference::Url(ImageUrl {
                         url: "https://example.com/image.png".to_string(),
                         detail: Some(ImageDetail::High),
-                    }),
+                    })),
                 ],
                 tool_calls: vec![ToolCall {
                     id: "x".to_string(),
@@ -1574,10 +1621,10 @@ mod durable_impl {
                 id: "response_id".to_string(),
                 content: vec![
                     ContentPart::Text("Hello".to_string()),
-                    ContentPart::Image(ImageUrl {
+                    ContentPart::Image(ImageReference::Url(ImageUrl {
                         url: "https://example.com/image.png".to_string(),
                         detail: Some(ImageDetail::High),
-                    }),
+                    })),
                 ],
                 tool_calls: vec![ToolCall {
                     id: "x".to_string(),
@@ -1616,20 +1663,21 @@ mod durable_impl {
                     Message {
                         role: Role::Assistant,
                         name: None,
-                        content: vec![ContentPart::Image(ImageUrl {
+                        content: vec![ContentPart::Image(ImageReference::Url(ImageUrl {
                             url: "https://example.com/image.png".to_string(),
                             detail: Some(ImageDetail::High),
-                        })],
+                        }))],
                     },
                     Message {
                         role: Role::User,
                         name: None,
                         content: vec![
                             ContentPart::Text("Analyze this image:".to_string()),
-                            ContentPart::InlineImage(ImageSource {
+                            ContentPart::Image(ImageReference::Inline(ImageSource {
                                 data: vec![0, 1, 2, 3, 4, 5],
-                                mime_type: Some("image/jpeg".to_string()),
-                            }),
+                                mime_type: "image/jpeg".to_string(),
+                                detail: None,
+                            })),
                         ],
                     },
                 ],
