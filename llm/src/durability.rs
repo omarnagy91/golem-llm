@@ -103,9 +103,9 @@ mod durable_impl {
     use crate::durability::{DurableLLM, ExtendedGuest};
     use crate::golem::llm::llm::{
         ChatEvent, ChatStream, CompleteResponse, Config, ContentPart, Error, ErrorCode,
-        FinishReason, Guest, GuestChatStream, ImageDetail, ImageSource, ImageUrl, Kv, Message,
-        ResponseMetadata, Role, StreamDelta, StreamEvent, ToolCall, ToolDefinition, ToolFailure,
-        ToolResult, ToolSuccess, Usage, ImageReference,
+        FinishReason, Guest, GuestChatStream, ImageDetail, ImageReference, ImageSource, ImageUrl,
+        Kv, Message, ResponseMetadata, Role, StreamDelta, StreamEvent, ToolCall, ToolDefinition,
+        ToolFailure, ToolResult, ToolSuccess, Usage,
     };
     use golem_rust::bindings::golem::durability::durability::{
         DurableFunctionType, LazyInitializedPollable,
@@ -1477,8 +1477,8 @@ mod durable_impl {
         use crate::durability::durable_impl::SendInput;
         use crate::golem::llm::llm::{
             ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason,
-            ImageDetail, ImageSource, ImageUrl, Message, ResponseMetadata, Role, ToolCall, Usage,
-            ImageReference,
+            ImageDetail, ImageReference, ImageSource, ImageUrl, Message, ResponseMetadata, Role,
+            ToolCall, Usage,
         };
         use golem_rust::value_and_type::{FromValueAndType, IntoValueAndType};
         use golem_rust::wasm_rpc::WitTypeNode;

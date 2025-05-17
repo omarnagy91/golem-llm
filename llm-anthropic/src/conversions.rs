@@ -1,12 +1,12 @@
 use crate::client::{
-    Content, ImageSource as ClientImageSource, MediaType, MessagesRequest, MessagesRequestMetadata, MessagesResponse,
-    StopReason, Tool, ToolChoice,
+    Content, ImageSource as ClientImageSource, MediaType, MessagesRequest, MessagesRequestMetadata,
+    MessagesResponse, StopReason, Tool, ToolChoice,
 };
 use base64::{engine::general_purpose, Engine as _};
 use golem_llm::golem::llm::llm::{
-    ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason, ImageUrl,
-    Message, ResponseMetadata, Role, ToolCall, ToolDefinition, ToolResult, Usage,
-    ImageReference, ImageSource,
+    ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason,
+    ImageReference, ImageSource, ImageUrl, Message, ResponseMetadata, Role, ToolCall,
+    ToolDefinition, ToolResult, Usage,
 };
 use std::collections::HashMap;
 
@@ -105,7 +105,10 @@ pub fn process_response(response: MessagesResponse) -> ChatEvent {
             Content::Text { text, .. } => contents.push(ContentPart::Text(text)),
             Content::Image { source, .. } => match source {
                 ClientImageSource::Url { url } => {
-                    contents.push(ContentPart::Image(ImageReference::Url(ImageUrl { url, detail: None })))
+                    contents.push(ContentPart::Image(ImageReference::Url(ImageUrl {
+                        url,
+                        detail: None,
+                    })))
                 }
                 ClientImageSource::Base64 { data, media_type } => {
                     match general_purpose::STANDARD.decode(data) {
@@ -116,11 +119,13 @@ pub fn process_response(response: MessagesResponse) -> ChatEvent {
                                 crate::client::MediaType::Gif => "image/gif".to_string(),
                                 crate::client::MediaType::Webp => "image/webp".to_string(),
                             };
-                            contents.push(ContentPart::Image(ImageReference::Inline(ImageSource {
-                                data: decoded_data,
-                                mime_type: mime_type_str,
-                                detail: None,
-                            })));
+                            contents.push(ContentPart::Image(ImageReference::Inline(
+                                ImageSource {
+                                    data: decoded_data,
+                                    mime_type: mime_type_str,
+                                    detail: None,
+                                },
+                            )));
                         }
                         Err(e) => {
                             return ChatEvent::Error(Error {

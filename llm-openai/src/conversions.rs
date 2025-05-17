@@ -5,8 +5,8 @@ use crate::client::{
 use base64::{engine::general_purpose, Engine as _};
 use golem_llm::error::error_code_from_status;
 use golem_llm::golem::llm::llm::{
-    ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, ImageDetail, Message,
-    ResponseMetadata, Role, ToolCall, ToolDefinition, ToolResult, Usage, ImageReference,
+    ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, ImageDetail,
+    ImageReference, Message, ResponseMetadata, Role, ToolCall, ToolDefinition, ToolResult, Usage,
 };
 use reqwest::StatusCode;
 use std::collections::HashMap;
