@@ -431,7 +431,7 @@ impl Guest for Component {
 
         let mut result = String::new();
 
-        let worker_name = std::env::var("GOLEM_WORKER_NAME").unwrap();
+        let name = std::env::var("GOLEM_WORKER_NAME").unwrap();
         let mut round = 0;
 
         loop {
@@ -445,8 +445,8 @@ impl Guest for Component {
 
                 match event {
                     StreamEvent::Delta(delta) => {
-                        for content_part_item in delta.content.unwrap_or_default() {
-                            match content_part_item {
+                        for content in delta.content.unwrap_or_default() {
+                            match content {
                                 llm::ContentPart::Text(txt) => {
                                     result.push_str(&txt);
                                 }
@@ -477,7 +477,7 @@ impl Guest for Component {
 
             if round == 2 {
                 atomically(|| {
-                    let client = TestHelperApi::new(&worker_name);
+                    let client = TestHelperApi::new(&name);
                     let answer = client.blocking_inc_and_get();
                     if answer == 1 {
                         panic!("Simulating crash")
