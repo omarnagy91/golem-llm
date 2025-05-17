@@ -4,6 +4,7 @@ mod bindings;
 use golem_rust::atomically;
 use crate::bindings::exports::test::llm_exports::test_llm_api::*;
 use crate::bindings::golem::llm::llm;
+use crate::bindings::golem::llm::llm::StreamEvent;
 use crate::bindings::test::helper_client::test_helper_client::TestHelperApi;
 
 struct Component;
@@ -114,7 +115,7 @@ impl Guest for Component {
             provider_options: vec![],
         };
 
-        let input_content = vec![
+        let input = vec![
             llm::ContentPart::Text("Generate a random number between 1 and 10".to_string()),
             llm::ContentPart::Text(
                 "then translate this number to German and output it as a text message.".to_string(),
@@ -126,7 +127,7 @@ impl Guest for Component {
             &[llm::Message {
                 role: llm::Role::User,
                 name: Some("vigoo".to_string()),
-                content: input_content.clone(),
+                content: input.clone(),
             }],
             &config,
         );
@@ -168,7 +169,7 @@ impl Guest for Component {
                 &[llm::Message {
                     role: llm::Role::User,
                     name: Some("vigoo".to_string()),
-                    content: input_content.clone(),
+                    content: input.clone(),
                 }],
                 &calls,
                 &config,
@@ -232,13 +233,13 @@ impl Guest for Component {
                 println!("Received {event:?}");
 
                 match event {
-                    llm::StreamEvent::Delta(delta) => {
+                    StreamEvent::Delta(delta) => {
                         result.push_str(&format!("DELTA: {:?}\n", delta,));
                     }
-                    llm::StreamEvent::Finish(finish) => {
+                    StreamEvent::Finish(finish) => {
                         result.push_str(&format!("FINISH: {:?}\n", finish,));
                     }
-                    llm::StreamEvent::Error(error) => {
+                    StreamEvent::Error(error) => {
                         result.push_str(&format!(
                             "ERROR: {:?} {} ({})\n",
                             error.code,
@@ -282,7 +283,7 @@ impl Guest for Component {
             provider_options: vec![],
         };
 
-        let input_content = vec![
+        let input = vec![
             llm::ContentPart::Text("Generate a random number between 1 and 10".to_string()),
             llm::ContentPart::Text(
                 "then translate this number to German and output it as a text message.".to_string(),
@@ -294,7 +295,7 @@ impl Guest for Component {
             &[llm::Message {
                 role: llm::Role::User,
                 name: Some("vigoo".to_string()),
-                content: input_content,
+                content: input,
             }],
             &config,
         );
@@ -311,13 +312,13 @@ impl Guest for Component {
                 println!("Received {event:?}");
 
                 match event {
-                    llm::StreamEvent::Delta(delta) => {
+                    StreamEvent::Delta(delta) => {
                         result.push_str(&format!("DELTA: {:?}\n", delta,));
                     }
-                    llm::StreamEvent::Finish(finish) => {
+                    StreamEvent::Finish(finish) => {
                         result.push_str(&format!("FINISH: {:?}\n", finish,));
                     }
-                    llm::StreamEvent::Error(error) => {
+                    StreamEvent::Error(error) => {
                         result.push_str(&format!(
                             "ERROR: {:?} {} ({})\n",
                             error.code,
@@ -443,7 +444,7 @@ impl Guest for Component {
                 println!("Received {event:?}");
 
                 match event {
-                    llm::StreamEvent::Delta(delta) => {
+                    StreamEvent::Delta(delta) => {
                         for content_part_item in delta.content.unwrap_or_default() {
                             match content_part_item {
                                 llm::ContentPart::Text(txt) => {
@@ -460,10 +461,10 @@ impl Guest for Component {
                             }
                         }
                     }
-                    llm::StreamEvent::Finish(finish) => {
+                    StreamEvent::Finish(finish) => {
                         result.push_str(&format!("\nFINISH: {:?}\n", finish,));
                     }
-                    llm::StreamEvent::Error(error) => {
+                    StreamEvent::Error(error) => {
                         result.push_str(&format!(
                             "\nERROR: {:?} {} ({})\n",
                             error.code,
