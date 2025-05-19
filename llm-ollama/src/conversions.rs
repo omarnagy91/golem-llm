@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use crate::client::{
-    CompletionsRequest, CompletionsResponse, FunctionTool, MessageRequest, MessageRole,
-    OllamaModelOptions, Tool,
+    image_to_base64, CompletionsRequest, CompletionsResponse, FunctionTool, MessageRequest, MessageRole, OllamaModelOptions, Tool
 };
 use golem_llm::golem::llm::llm::{
     ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason, ImageDetail,
     Message, ResponseMetadata, Role, ToolCall as golem_llm_ToolCall, ToolDefinition, ToolResult,
     Usage,
 };
+use log::trace;
 
 pub fn messages_to_request(
     messages: Vec<Message>,
@@ -31,7 +31,7 @@ pub fn messages_to_request(
         };
 
         let mut message_content = String::new();
-        let mut attached_image = None;
+        let mut attached_image = Vec::new();
 
         for content_part in message.content {
             match content_part {
@@ -41,8 +41,14 @@ pub fn messages_to_request(
                     }
                     message_content.push_str(&text);
                 }
-                ContentPart::Image(_image_url) => {
-                    todo!("Ollama accept base64 image")
+                ContentPart::Image(image_url) => {
+                     let url =&image_url.url;
+                     match image_to_base64(url) {
+                        Ok(image)=>attached_image.push(image), 
+                        Err(err)=> {
+                            trace!("Failed to encode image: {url}")
+                        }
+                     }
                 }
             }
         }
@@ -50,7 +56,7 @@ pub fn messages_to_request(
         request_message.push(MessageRequest {
             content: message_content,
             role: message_role,
-            images: attached_image,
+            images:  Some(attached_image),
             tools_calls: None,
         });
     }

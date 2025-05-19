@@ -2,7 +2,7 @@ use std::{fmt::Debug, fs, path::Path};
 
 use base64::{engine::general_purpose, Engine};
 use golem_llm::{
-    error::{error_code_from_status, from_event_source_error, from_reqwest_error},
+    error::{error_code_from_status, from_event_source_error},
     event_source::{error, EventSource},
     golem::llm::llm::{Error, ErrorCode},
 };
@@ -15,6 +15,7 @@ use reqwest::{
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::Url;
+use std::io::{BufRead, BufReader};
 
 pub struct OllamaApi {
     default_model: String,
@@ -23,13 +24,14 @@ pub struct OllamaApi {
 }
 
 impl OllamaApi {
-    pub fn new(default_model: String, base_url: Option<String>) -> Self {
+    pub fn new(default_model: String) -> Self {
+        let base_url = std::env::var("GOLEM_OLLAMA_BASE_URL").unwrap_or("http://localhost:11434".to_string());
         let client = Client::builder()
             .build()
             .expect("Failed to initialize HTTP client");
         Self {
             default_model,
-            base_url : if base_url.is_none() { "http://localhost:11434".to_string() } else { base_url.unwrap() },
+            base_url ,
             client,
         }
     }
@@ -38,7 +40,7 @@ impl OllamaApi {
         trace!("Sending request to Ollama API: {params:?}");
 
         let mut modified_params = params;
-        modified_params.stream = Some(true);
+        modified_params.stream = Some(false);
         if modified_params.model.is_none() {
             modified_params.model = Some(self.default_model.clone())
         };
@@ -46,7 +48,7 @@ impl OllamaApi {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
-        let url = format!("{}/api/generate", self.base_url);
+        let url = format!("{}/api/chat", self.base_url);
         let response: Response = self
             .client
             .request(Method::POST, url)
@@ -75,19 +77,20 @@ impl OllamaApi {
 
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        headers.insert("Accept", HeaderValue::from_static("application/x-ndjson"));
 
-        let url = format!("{}/api/generate", self.base_url);
+        let url = format!("{}/api/chat", self.base_url);
         let response = self
             .client
             .request(Method::POST, url)
             .headers(headers)
-            .json(&json_body)
+            .body(json_body)
             .send()
             .map_err(|err| from_reqwest_error("Request failed", err))?;
-        trace!("Initializing SSE stream");
+        trace!("Initializing NDJSON EventSource stream");
 
         EventSource::new(response)
-            .map_err(|err| from_event_source_error("Failed to create SSE stream", err))
+            .map_err(|err| from_event_source_error("Failed to create EventSource stream", err))
     }
 }
 
@@ -209,7 +212,7 @@ pub struct CompletionsResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub done: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub done_reason: Option<bool>,
+    pub done_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_duration: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -336,4 +339,44 @@ pub fn image_to_base64(source: &str) -> Result<String, Box<dyn std::error::Error
 
     let base64_data = general_purpose::STANDARD.encode(&bytes);
     Ok(format!("data:{};base64,{}", mime_type, base64_data))
+}
+
+
+pub fn from_reqwest_error(context: &str, err: reqwest::Error) -> Error {
+    Error {
+        code: ErrorCode::InternalError,
+        message: format!("{}: {}", context, err),
+        provider_error_json: None,
+    }
+}
+
+pub struct NdjsonStream {
+    lines: std::vec::IntoIter<String>,
+}
+
+impl NdjsonStream {
+    pub fn new(response: Response) -> Result<Self, Error> {
+        let text = response.text().map_err(|e| from_reqwest_error("Failed to read response", e))?;
+        let lines = text.lines().map(|s| s.to_string()).collect::<Vec<_>>().into_iter();
+        Ok(Self { lines })
+    }
+}
+
+impl Iterator for NdjsonStream {
+    type Item = Result<CompletionsResponse, Error>;
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(line) = self.lines.next() {
+            if !line.trim().is_empty() {
+                match serde_json::from_str::<CompletionsResponse>(&line) {
+                    Ok(completions_response) => return Some(Ok(completions_response)),
+                    Err(e) => return Some(Err(Error {
+                        code: ErrorCode::InternalError,
+                        message: format!("Failed to parse NDJSON line: {e}"),
+                        provider_error_json: Some(line),
+                    })),
+                }
+            }
+        }
+        None
+    }
 }
