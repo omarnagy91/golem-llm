@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::client::{
-    image_to_base64, CompletionsRequest, CompletionsResponse, FunctionTool, MessageRequest, MessageRole, OllamaModelOptions, Tool
+    image_to_base64, CompletionsRequest, CompletionsResponse, FunctionTool, MessageRequest,
+    MessageRole, OllamaModelOptions, Tool,
 };
 use golem_llm::golem::llm::llm::{
     ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason, ImageDetail,
@@ -42,13 +43,13 @@ pub fn messages_to_request(
                     message_content.push_str(&text);
                 }
                 ContentPart::Image(image_url) => {
-                     let url =&image_url.url;
-                     match image_to_base64(url) {
-                        Ok(image)=>attached_image.push(image), 
-                        Err(err)=> {
-                            trace!("Failed to encode image: {url}")
+                    let url = &image_url.url;
+                    match image_to_base64(url) {
+                        Ok(image) => attached_image.push(image),
+                        Err(err) => {
+                            trace!("Failed to encode image: {url}\nError: {err}\n");
                         }
-                     }
+                    }
                 }
             }
         }
@@ -56,7 +57,7 @@ pub fn messages_to_request(
         request_message.push(MessageRequest {
             content: message_content,
             role: message_role,
-            images:  Some(attached_image),
+            images: Some(attached_image),
             tools_calls: None,
         });
     }
@@ -121,18 +122,16 @@ fn parse_option<T: std::str::FromStr>(options: &HashMap<String, String>, key: &s
 }
 
 pub fn process_response(response: CompletionsResponse) -> ChatEvent {
-    if response.messages.is_some() {
+    if response.message.is_some() {
         let mut chat_events = Vec::<golem_llm_ToolCall>::new();
-
-        for message in response.messages.clone().unwrap() {
-            if message.tool_calls.is_some() {
-                for tool_call in message.tool_calls.clone().unwrap() {
-                    chat_events.push(golem_llm_ToolCall {
-                        id: tool_call.id,
-                        name: tool_call.name,
-                        arguments_json: tool_call.function.unwrap().arguments.to_string(),
-                    });
-                }
+        let message = response.message.unwrap();
+        if message.tool_calls.is_some() {
+            for tool_call in message.tool_calls.clone().unwrap() {
+                chat_events.push(golem_llm_ToolCall {
+                    id: tool_call.id,
+                    name: tool_call.name,
+                    arguments_json: tool_call.function.unwrap().arguments.to_string(),
+                });
             }
         }
 
@@ -141,10 +140,9 @@ pub fn process_response(response: CompletionsResponse) -> ChatEvent {
         }
 
         let mut content = Vec::new();
-        for message in response.messages.unwrap() {
-            if message.content.is_some() {
-                content.push(ContentPart::Text(message.content.unwrap()));
-            }
+
+        if message.content.is_some() {
+            content.push(ContentPart::Text(message.content.unwrap()));
         }
 
         let finish_reason = if response.done.unwrap_or(false) {
@@ -183,3 +181,6 @@ pub fn process_response(response: CompletionsResponse) -> ChatEvent {
         })
     }
 }
+
+
+

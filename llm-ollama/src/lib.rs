@@ -40,42 +40,6 @@ impl OllamaChatStream {
             finished: RefCell::new(false),
         })
     }
-
-    // pub fn get_next(&mut self) -> Option<Vec<StreamEvent>> {
-    //     if self.is_finished() {
-    //         return Some(vec![]);
-    //     }
-    //     let mut stream = self.stream.borrow_mut();
-    //     if let Some(stream) = stream.as_mut() {
-    //         // NdjsonStream is an iterator over Result<CompletionsResponse, Error>
-    //         match stream.next() {
-    //             Some(Ok(response)) => {
-    //                 match self.decode_message(&serde_json::to_string(&response).unwrap()) {
-    //                     Ok(Some(event)) => Some(vec![event]),
-    //                     Ok(None) => None,
-    //                     Err(error) => Some(vec![StreamEvent::Error(Error {
-    //                         code: ErrorCode::InternalError,
-    //                         message: error,
-    //                         provider_error_json: None,
-    //                     })]),
-    //                 }
-    //             }
-    //             Some(Err(error)) => {
-    //                 self.set_finished();
-    //                 Some(vec![StreamEvent::Error(error)])
-    //             }
-    //             None => {
-    //                 self.set_finished();
-    //                 Some(vec![])
-    //             }
-    //         }
-    //     } else if let Some(error) = self.failure.clone() {
-    //         self.set_finished();
-    //         Some(vec![StreamEvent::Error(error)])
-    //     } else {
-    //         None
-    //     }
-    // }
 }
 
 impl LlmChatStreamState for OllamaChatStream {
@@ -99,7 +63,7 @@ impl LlmChatStreamState for OllamaChatStream {
     }
 
     fn decode_message(&self, raw: &str) -> Result<Option<StreamEvent>, String> {
-        trace!("Received raw stream event: {raw}");
+        println!("Received raw stream event: {raw}");
         let json: serde_json::Value = serde_json::from_str(raw)
             .map_err(|err| format!("Failed to deserialize stream event: {err}"))?;
 
@@ -126,9 +90,10 @@ impl LlmChatStreamState for OllamaChatStream {
             .map_err(|err| format!("Failed to deserialize stream event: {err}"))?;
         let mut content: Vec<golem_llm::exports::golem::llm::llm::ContentPart> = Vec::new();
         let mut tool_calls: Vec<golem_llm::exports::golem::llm::llm::ToolCall> = Vec::new();
-        if response.messages.is_some() {
-            for message in response.messages.unwrap() {
-                if message.content.is_some() {
+        
+        match response.message {
+            Some(message)=> {
+                               if message.content.is_some() {
                     content.push(ContentPart::Text(message.content.unwrap_or_default()));
                 }
 
@@ -146,9 +111,12 @@ impl LlmChatStreamState for OllamaChatStream {
                             .collect();
                     tool_calls.append(&mut message_tool_calls);
                 }
-            }
-        }
+ 
+            },
+            None =>{},
 
+        } ;
+ 
         Ok(Some(StreamEvent::Delta(StreamDelta {
             content: Some(content),
             tool_calls: if tool_calls.is_empty() {
@@ -158,6 +126,8 @@ impl LlmChatStreamState for OllamaChatStream {
             },
         })))
     }
+
+
 }
 
 struct OllamaComponent;

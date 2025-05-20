@@ -14,8 +14,8 @@ use reqwest::{
 };
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use url::Url;
 use std::io::{BufRead, BufReader};
+use url::Url;
 
 pub struct OllamaApi {
     default_model: String,
@@ -25,13 +25,14 @@ pub struct OllamaApi {
 
 impl OllamaApi {
     pub fn new(default_model: String) -> Self {
-        let base_url = std::env::var("GOLEM_OLLAMA_BASE_URL").unwrap_or("http://localhost:11434".to_string());
+        let base_url =
+            std::env::var("GOLEM_OLLAMA_BASE_URL").unwrap_or("http://localhost:11434".to_string());
         let client = Client::builder()
             .build()
             .expect("Failed to initialize HTTP client");
         Self {
             default_model,
-            base_url ,
+            base_url,
             client,
         }
     }
@@ -87,8 +88,8 @@ impl OllamaApi {
             .body(json_body)
             .send()
             .map_err(|err| from_reqwest_error("Request failed", err))?;
-        trace!("Initializing NDJSON EventSource stream");
-
+        println!("Initializing NDJSON EventSource stream");
+        println!("Response: {:?}", response);
         EventSource::new(response)
             .map_err(|err| from_event_source_error("Failed to create EventSource stream", err))
     }
@@ -208,7 +209,7 @@ pub struct CompletionsResponse {
     pub model: String,
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub messages: Option<Vec<MessageResponse>>,
+    pub message: Option<MessageResponse>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub done: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -280,13 +281,10 @@ pub fn handle_response<T: DeserializeOwned + Debug>(response: Response) -> Resul
             let raw_body = response
                 .text()
                 .map_err(|err| from_reqwest_error("Failed to receive response body", err))?;
-            trace!("Received response from OpenRouter API: {raw_body:?}");
+            println!("Received response from ollama API: {:?}", &raw_body);
 
             match serde_json::from_str::<T>(&raw_body) {
-                Ok(body) => {
-                    trace!("Received response from OpenRouter API: {body:?}");
-                    Ok(body)
-                }
+                Ok(body) => Ok(body),
                 Err(err) => Err(Error {
                     code: ErrorCode::InternalError,
                     message: format!("Failed to parse response body: {err}"),
@@ -341,42 +339,10 @@ pub fn image_to_base64(source: &str) -> Result<String, Box<dyn std::error::Error
     Ok(format!("data:{};base64,{}", mime_type, base64_data))
 }
 
-
 pub fn from_reqwest_error(context: &str, err: reqwest::Error) -> Error {
     Error {
         code: ErrorCode::InternalError,
         message: format!("{}: {}", context, err),
         provider_error_json: None,
-    }
-}
-
-pub struct NdjsonStream {
-    lines: std::vec::IntoIter<String>,
-}
-
-impl NdjsonStream {
-    pub fn new(response: Response) -> Result<Self, Error> {
-        let text = response.text().map_err(|e| from_reqwest_error("Failed to read response", e))?;
-        let lines = text.lines().map(|s| s.to_string()).collect::<Vec<_>>().into_iter();
-        Ok(Self { lines })
-    }
-}
-
-impl Iterator for NdjsonStream {
-    type Item = Result<CompletionsResponse, Error>;
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(line) = self.lines.next() {
-            if !line.trim().is_empty() {
-                match serde_json::from_str::<CompletionsResponse>(&line) {
-                    Ok(completions_response) => return Some(Ok(completions_response)),
-                    Err(e) => return Some(Err(Error {
-                        code: ErrorCode::InternalError,
-                        message: format!("Failed to parse NDJSON line: {e}"),
-                        provider_error_json: Some(line),
-                    })),
-                }
-            }
-        }
-        None
     }
 }
