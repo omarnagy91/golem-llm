@@ -136,6 +136,7 @@ pub struct EventStream {
 impl EventStream {
     /// Initialize the EventStream with a Stream
     pub fn new(stream: InputStream) -> Self {
+        println!("EventStream::new");
         Self {
             stream: Utf8Stream::new(stream),
             buffer: String::new(),
@@ -148,21 +149,25 @@ impl EventStream {
     /// Set the last event ID of the stream. Useful for initializing the stream with a previous
     /// last event ID
     pub fn set_last_event_id(&mut self, id: impl Into<String>) {
+        println!("EventStream::set_last_event_id");
         self.last_event_id = id.into();
     }
 
     /// Get the last event ID of the stream
     pub fn last_event_id(&self) -> &str {
+        println!("EventStream::last_event_id");
         &self.last_event_id
     }
 
     pub fn subscribe(&self) -> Pollable {
+        println!("EventStream::subscribe");
         self.stream.subscribe()
     }
 
     pub fn poll_next(
         &mut self,
     ) -> Poll<Option<Result<MessageEvent, EventStreamError<StreamError>>>> {
+        println!("EventStream::poll_next");
         trace!("Polling for next event");
 
         match parse_event(&mut self.buffer, &mut self.builder) {
@@ -230,6 +235,7 @@ pub enum EventStreamError<E> {
 
 impl<E> From<Utf8StreamError<E>> for EventStreamError<E> {
     fn from(err: Utf8StreamError<E>) -> Self {
+        println!("EventStreamError::from");
         match err {
             Utf8StreamError::Utf8(err) => Self::Utf8(err),
             Utf8StreamError::Transport(err) => Self::Transport(err),
@@ -239,6 +245,7 @@ impl<E> From<Utf8StreamError<E>> for EventStreamError<E> {
 
 impl<E> From<NomError<&str>> for EventStreamError<E> {
     fn from(err: NomError<&str>) -> Self {
+        println!("EventStreamError::from");
         EventStreamError::Parser(NomError::new(err.input.to_string(), err.code))
     }
 }
@@ -248,6 +255,7 @@ where
     E: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        println!("EventStreamError::fmt");
         match self {
             Self::Utf8(err) => f.write_fmt(format_args!("UTF8 error: {}", err)),
             Self::Parser(err) => f.write_fmt(format_args!("Parse error: {}", err)),
@@ -262,6 +270,7 @@ fn parse_event<E>(
     buffer: &mut String,
     builder: &mut EventBuilder,
 ) -> Result<Option<MessageEvent>, EventStreamError<E>> {
+    println!("poll_next->parse_event");
     if buffer.is_empty() {
         return Ok(None);
     }

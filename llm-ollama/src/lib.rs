@@ -21,12 +21,12 @@ mod conversions;
 struct OllamaChatStream {
     stream: RefCell<Option<EventSource>>,
     failure: Option<Error>,
-    finished: RefCell<bool>,
+    finished: RefCell<bool>, 
 }
 
 impl OllamaChatStream {
     pub fn new(stream: EventSource) -> LlmChatStream<Self> {
-        // Remove EventSource dependency and use direct HTTP response
+        println!("OllamaChatStream::new");
         LlmChatStream::new(OllamaChatStream {
             stream: RefCell::new(Some(stream)),
             failure: None,
@@ -35,6 +35,7 @@ impl OllamaChatStream {
     }
 
     pub fn failed(error: Error) -> LlmChatStream<Self> {
+        println!("OllamaChatStream::failed");
         LlmChatStream::new(OllamaChatStream {
             stream: RefCell::new(None),
             failure: Some(error),
@@ -45,25 +46,31 @@ impl OllamaChatStream {
 
 impl LlmChatStreamState for OllamaChatStream {
     fn failure(&self) -> &Option<Error> {
+        println!("OllamaChatStream::failure");
         &self.failure
     }
     fn is_finished(&self) -> bool {
+        println!("OllamaChatStream::is_finished");
         *self.finished.borrow()
     }
 
     fn set_finished(&self) {
+        println!("OllamaChatStream::set_finished");
         *self.finished.borrow_mut() = true;
     }
 
     fn stream(&self) -> Ref<Option<EventSource>> {
+        println!("OllamaChatStream::stream");
         self.stream.borrow()
     }
 
     fn stream_mut(&self) -> RefMut<Option<EventSource>> {
+        println!("OllamaChatStream::stream_mut");
         self.stream.borrow_mut()
     }
 
    fn decode_message(&self, raw: &str) -> Result<Option<StreamEvent>, String> {
+        println!("OllamaChatStream::decode_message");
         trace!("Parsing NDJSON line: {raw}");        
         let json: serde_json::Value = serde_json::from_str(raw.trim())
             .map_err(|e| format!("JSON parse error: {e}"))?;
@@ -103,6 +110,7 @@ struct OllamaComponent;
 
 impl OllamaComponent {
     fn request(client: &OllamaApi, request: CompletionsRequest) -> ChatEvent {
+        println!("OllamaComponent::request");
         match client.send_chat(request) {
             Ok(response) => process_response(response),
             Err(err) => ChatEvent::Error(err),
@@ -113,6 +121,7 @@ impl OllamaComponent {
         client: &OllamaApi,
         mut request: CompletionsRequest,
     ) -> LlmChatStream<OllamaChatStream> {
+        println!("OllamaComponent::streaming_request");
         request.stream = Some(true);
         match client.send_chat_stream(request) {
             Ok(stream) => OllamaChatStream::new(stream),
@@ -125,6 +134,7 @@ impl Guest for OllamaComponent {
     type ChatStream = LlmChatStream<OllamaChatStream>;
 
     fn send(messages: Vec<Message>, config: Config) -> ChatEvent {
+        println!("OllamaComponent::send");
         LOGGING_STATE.with_borrow_mut(|state| state.init());
 
         let client = OllamaApi::new(config.model.clone());
@@ -139,6 +149,7 @@ impl Guest for OllamaComponent {
         tool_results: Vec<(ToolCall, ToolResult)>,
         config: Config,
     ) -> ChatEvent {
+        println!("OllamaComponent::continue_");
         LOGGING_STATE.with_borrow_mut(|state| state.init());
         let client = OllamaApi::new(config.model.clone());
         match messages_to_request(messages, config.clone()) {
@@ -148,12 +159,14 @@ impl Guest for OllamaComponent {
     }
 
     fn stream(messages: Vec<Message>, config: Config) -> ChatStream {
+        println!("OllamaComponent::stream");
         ChatStream::new(Self::unwrapped_stream(messages, config.clone()))
     }
 }
 
 impl ExtendedGuest for OllamaComponent {
     fn unwrapped_stream(messages: Vec<Message>, config: Config) -> LlmChatStream<OllamaChatStream> {
+        println!("OllamaComponent::unwrapped_stream");
         LOGGING_STATE.with_borrow_mut(|state| state.init());
 
         let client = OllamaApi::new(config.model.clone());
@@ -164,6 +177,7 @@ impl ExtendedGuest for OllamaComponent {
     }
 
     fn retry_prompt(original_messages: &[Message], partial_result: &[StreamDelta]) -> Vec<Message> {
+        println!("OllamaComponent::retry_prompt");
         let mut extended_messages = Vec::new();
 
         extended_messages.push(Message {
@@ -217,6 +231,7 @@ impl ExtendedGuest for OllamaComponent {
     }
 
     fn subscribe(stream: &Self::ChatStream) -> Pollable {
+        println!("OllamaComponent::subscribe");
         stream.subscribe()
     }
 }

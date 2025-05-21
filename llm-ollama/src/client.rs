@@ -25,6 +25,7 @@ pub struct OllamaApi {
 
 impl OllamaApi {
     pub fn new(default_model: String) -> Self {
+        println!("OllamaApi::new");
         let base_url =
             std::env::var("GOLEM_OLLAMA_BASE_URL").unwrap_or("http://localhost:11434".to_string());
         let client = Client::builder()
@@ -38,6 +39,7 @@ impl OllamaApi {
     }
 
     pub fn send_chat(&self, params: CompletionsRequest) -> Result<CompletionsResponse, Error> {
+        println!("OllamaApi:: send_chat");
         trace!("Sending request to Ollama API: {params:?}");
 
         let mut modified_params = params;
@@ -62,6 +64,7 @@ impl OllamaApi {
     }
 
     pub fn send_chat_stream(&self, params: CompletionsRequest) -> Result<EventSource, Error> {
+        println!("OllamaApi::send_chat_stream");
         trace!("Sending request to Ollama API: {params:?}");
 
         let mut modified_params = params;

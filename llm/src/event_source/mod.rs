@@ -35,6 +35,7 @@ pub struct EventSource {
 
 impl EventSource {
     pub fn new(response: Response) -> Result<Self, Error> {
+        println!("EventSource::new");
         match check_response(response) {
             Ok(mut response) => {
                 let handle = unsafe {
@@ -56,11 +57,13 @@ impl EventSource {
 
     /// Close the EventSource stream and stop trying to reconnect
     pub fn close(&mut self) {
+        println!("EventSource::close");
         self.is_closed = true;
     }
 
     /// Get the current ready state
     pub fn ready_state(&self) -> ReadyState {
+        println!("EventSource::ready_state");
         if self.is_closed {
             ReadyState::Closed
         } else {
@@ -69,10 +72,12 @@ impl EventSource {
     }
 
     pub fn subscribe(&self) -> Pollable {
+        println!("EventSource::subscribe");
         self.stream.subscribe()
     }
 
     pub fn poll_next(&mut self) -> Poll<Option<Result<Event, Error>>> {
+        println!("EventSource::poll_next");
         if self.is_closed {
             return Poll::Ready(None);
         }
@@ -95,6 +100,7 @@ impl EventSource {
 }
 
 fn check_response(response: Response) -> Result<Response, Error> {
+    println!("EventSource->check_response");
     match response.status() {
         StatusCode::OK => {}
         status => {
@@ -118,7 +124,7 @@ fn check_response(response: Response) -> Result<Response, Error> {
             matches!(
                 (mime_type.type_(), mime_type.subtype()),
                 (mime::TEXT, mime::EVENT_STREAM)
-            )
+            ) || mime_type.subtype().as_str().contains("ndjson") 
         })
         .unwrap_or(false)
     {
@@ -139,6 +145,7 @@ pub enum Event {
 
 impl From<MessageEvent> for Event {
     fn from(event: MessageEvent) -> Self {
+        println!("Event::from");
         Event::Message(event)
     }
 }
