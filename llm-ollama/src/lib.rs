@@ -26,6 +26,7 @@ struct OllamaChatStream {
 
 impl OllamaChatStream {
     pub fn new(stream: EventSource) -> LlmChatStream<Self> {
+        // Remove EventSource dependency and use direct HTTP response
         LlmChatStream::new(OllamaChatStream {
             stream: RefCell::new(Some(stream)),
             failure: None,
@@ -62,69 +63,37 @@ impl LlmChatStreamState for OllamaChatStream {
         self.stream.borrow_mut()
     }
 
-    fn decode_message(&self, raw: &str) -> Result<Option<StreamEvent>, String> {
-        println!("Received raw stream event: {raw}");
-        let json: serde_json::Value = serde_json::from_str(raw)
-            .map_err(|err| format!("Failed to deserialize stream event: {err}"))?;
+   fn decode_message(&self, raw: &str) -> Result<Option<StreamEvent>, String> {
+        trace!("Parsing NDJSON line: {raw}");        
+        let json: serde_json::Value = serde_json::from_str(raw.trim())
+            .map_err(|e| format!("JSON parse error: {e}"))?;
 
         if json.get("done").and_then(|v| v.as_bool()).unwrap_or(false) {
-            let done_reasone = match json
-                .get("done_reason")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-            {
-                "stop" => Some(FinishReason::Stop),
-                _ => Some(FinishReason::Other),
-            };
-
             return Ok(Some(StreamEvent::Finish(ResponseMetadata {
-                finish_reason: done_reasone,
+                finish_reason: Some(FinishReason::Stop),
                 usage: None,
-                provider_id: None,
+                provider_id: None, 
                 timestamp: None,
                 provider_metadata_json: None,
             })));
         }
 
-        let response = serde_json::from_value::<CompletionsResponse>(json.clone())
-            .map_err(|err| format!("Failed to deserialize stream event: {err}"))?;
-        let mut content: Vec<golem_llm::exports::golem::llm::llm::ContentPart> = Vec::new();
-        let mut tool_calls: Vec<golem_llm::exports::golem::llm::llm::ToolCall> = Vec::new();
-        
-        match response.message {
-            Some(message)=> {
-                               if message.content.is_some() {
-                    content.push(ContentPart::Text(message.content.unwrap_or_default()));
+        if let Some(message) = json.get("message") {
+            let mut content = Vec::new();
+            
+            if let Some(text) = message.get("content").and_then(|c| c.as_str()) {
+                if !text.is_empty() {
+                    content.push(ContentPart::Text(text.to_string()));
                 }
-
-                if message.tool_calls.is_some() {
-                    let mut message_tool_calls: Vec<golem_llm::exports::golem::llm::llm::ToolCall> =
-                        message
-                            .tool_calls
-                            .unwrap()
-                            .iter()
-                            .map(|tc| golem_llm::exports::golem::llm::llm::ToolCall {
-                                id: tc.id.clone(),
-                                name: tc.function.as_ref().unwrap().name.clone(),
-                                arguments_json: tc.function.as_ref().unwrap().arguments.to_string(),
-                            })
-                            .collect();
-                    tool_calls.append(&mut message_tool_calls);
-                }
- 
-            },
-            None =>{},
-
-        } ;
- 
-        Ok(Some(StreamEvent::Delta(StreamDelta {
-            content: Some(content),
-            tool_calls: if tool_calls.is_empty() {
-                None
-            } else {
-                Some(tool_calls)
-            },
-        })))
+            }
+            if !content.is_empty() {
+                return Ok(Some(StreamEvent::Delta(StreamDelta {
+                    content: Some(content),
+                    tool_calls: None,
+                })));
+            }
+        }
+        Ok(None)
     }
 
 
