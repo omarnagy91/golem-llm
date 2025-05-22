@@ -21,7 +21,7 @@ mod conversions;
 struct OllamaChatStream {
     stream: RefCell<Option<EventSource>>,
     failure: Option<Error>,
-    finished: RefCell<bool>, 
+    finished: RefCell<bool>,
 }
 
 impl OllamaChatStream {
@@ -69,9 +69,9 @@ impl LlmChatStreamState for OllamaChatStream {
         self.stream.borrow_mut()
     }
 
-   fn decode_message(&self, raw: &str) -> Result<Option<StreamEvent>, String> {
+    fn decode_message(&self, raw: &str) -> Result<Option<StreamEvent>, String> {
         println!("OllamaChatStream::decode_message");
-        trace!("Parsing NDJSON line: {raw}");        
+        trace!("Parsing NDJSON line: {raw}");
         let json: serde_json::Value = serde_json::from_str(raw.trim())
             .map_err(|e| format!("JSON parse error: {e}"))?;
 
@@ -79,7 +79,7 @@ impl LlmChatStreamState for OllamaChatStream {
             return Ok(Some(StreamEvent::Finish(ResponseMetadata {
                 finish_reason: Some(FinishReason::Stop),
                 usage: None,
-                provider_id: None, 
+                provider_id: None,
                 timestamp: None,
                 provider_metadata_json: None,
             })));
@@ -87,7 +87,7 @@ impl LlmChatStreamState for OllamaChatStream {
 
         if let Some(message) = json.get("message") {
             let mut content = Vec::new();
-            
+
             if let Some(text) = message.get("content").and_then(|c| c.as_str()) {
                 if !text.is_empty() {
                     content.push(ContentPart::Text(text.to_string()));

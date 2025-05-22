@@ -167,7 +167,7 @@ impl EventStream {
     pub fn poll_next(
         &mut self,
     ) -> Poll<Option<Result<MessageEvent, EventStreamError<StreamError>>>> {
-        println!("EventStream::poll_next");
+        println!("EventStream::poll_next buffer {} ", self.buffer.as_str());
         trace!("Polling for next event");
 
         match parse_event(&mut self.buffer, &mut self.builder) {
@@ -270,18 +270,17 @@ fn parse_event<E>(
     buffer: &mut String,
     builder: &mut EventBuilder,
 ) -> Result<Option<MessageEvent>, EventStreamError<E>> {
-    println!("poll_next->parse_event");
     if buffer.is_empty() {
         return Ok(None);
     }
     loop {
-        match line(buffer.as_ref()) {
-            Ok((rem, next_line)) => {
-                builder.add(next_line);
-                let consumed = buffer.len() - rem.len();
-                let rem = buffer.split_off(consumed);
-                *buffer = rem;
-                if builder.is_complete {
+    match line(buffer.as_ref()) {
+        Ok((rem, next_line)) => {
+            builder.add(next_line);
+            let consumed = buffer.len() - rem.len();
+            let rem = buffer.split_off(consumed);
+            *buffer = rem;
+            if builder.is_complete {
                     if let Some(event) = builder.dispatch() {
                         return Ok(Some(event));
                     }
