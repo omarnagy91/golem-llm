@@ -1,4 +1,5 @@
 use crate::golem::llm::llm::{Config, ContentPart, Guest, Message, Role, StreamDelta};
+use golem_rust::wasm_rpc::Pollable;
 use std::marker::PhantomData;
 
 /// Wraps an LLM implementation with custom durability
@@ -56,6 +57,8 @@ pub trait ExtendedGuest: Guest + 'static {
         });
         extended_messages
     }
+
+    fn subscribe(stream: &Self::ChatStream) -> Pollable;
 }
 
 /// When the durability feature flag is off, wrapping with `DurableLLM` is just a passthrough
@@ -233,6 +236,22 @@ mod durable_impl {
                 subscription: RefCell::new(None),
             }
         }
+
+        fn subscribe(&self) -> Pollable {
+            let mut state = self.state.borrow_mut();
+            match &mut *state {
+                Some(DurableChatStreamState::Live { stream, .. }) => Impl::subscribe(stream),
+                Some(DurableChatStreamState::Replay { pollables, .. }) => {
+                    let lazy_pollable = LazyInitializedPollable::new();
+                    let pollable = lazy_pollable.subscribe();
+                    pollables.push(lazy_pollable);
+                    pollable
+                }
+                None => {
+                    unreachable!()
+                }
+            }
+        }
     }
 
     impl<Impl: ExtendedGuest> Drop for DurableChatStream<Impl> {
@@ -294,7 +313,7 @@ mod durable_impl {
                                     );
 
                                     for lazy_initialized_pollable in pollables {
-                                        lazy_initialized_pollable.set(stream.subscribe());
+                                        lazy_initialized_pollable.set(Impl::subscribe(&stream));
                                     }
 
                                     let next = stream.get_next();
@@ -376,22 +395,6 @@ mod durable_impl {
                 }
             }
         }
-
-        fn subscribe(&self) -> Pollable {
-            let mut state = self.state.borrow_mut();
-            match &mut *state {
-                Some(DurableChatStreamState::Live { stream, .. }) => stream.subscribe(),
-                Some(DurableChatStreamState::Replay { pollables, .. }) => {
-                    let lazy_pollable = LazyInitializedPollable::new();
-                    let pollable = lazy_pollable.subscribe();
-                    pollables.push(lazy_pollable);
-                    pollable
-                }
-                None => {
-                    unreachable!()
-                }
-            }
-        }
     }
 
     #[derive(Debug, Clone, PartialEq, IntoValue)]
@@ -427,7 +430,8 @@ mod durable_impl {
         use crate::durability::durable_impl::SendInput;
         use crate::golem::llm::llm::{
             ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason,
-            ImageDetail, ImageUrl, Message, ResponseMetadata, Role, ToolCall, Usage,
+            ImageDetail, ImageReference, ImageSource, ImageUrl, Message, ResponseMetadata, Role,
+            ToolCall, Usage,
         };
         use golem_rust::value_and_type::{FromValueAndType, IntoValueAndType};
         use golem_rust::wasm_rpc::WitTypeNode;
@@ -475,12 +479,31 @@ mod durable_impl {
         }
 
         #[test]
+        fn image_source_roundtrip() {
+            roundtrip_test(ImageSource {
+                data: vec![0, 1, 2, 3, 4, 5],
+                mime_type: "image/jpeg".to_string(),
+                detail: Some(ImageDetail::High),
+            });
+            roundtrip_test(ImageSource {
+                data: vec![255, 254, 253, 252],
+                mime_type: "image/png".to_string(),
+                detail: None,
+            });
+        }
+
+        #[test]
         fn content_part_roundtrip() {
             roundtrip_test(ContentPart::Text("Hello".to_string()));
-            roundtrip_test(ContentPart::Image(ImageUrl {
+            roundtrip_test(ContentPart::Image(ImageReference::Url(ImageUrl {
                 url: "https://example.com/image.png".to_string(),
                 detail: Some(ImageDetail::Low),
-            }));
+            })));
+            roundtrip_test(ContentPart::Image(ImageReference::Inline(ImageSource {
+                data: vec![0, 1, 2, 3, 4, 5],
+                mime_type: "image/jpeg".to_string(),
+                detail: Some(ImageDetail::Auto),
+            })));
         }
 
         #[test]
@@ -525,10 +548,10 @@ mod durable_impl {
                 id: "response_id".to_string(),
                 content: vec![
                     ContentPart::Text("Hello".to_string()),
-                    ContentPart::Image(ImageUrl {
+                    ContentPart::Image(ImageReference::Url(ImageUrl {
                         url: "https://example.com/image.png".to_string(),
                         detail: Some(ImageDetail::High),
-                    }),
+                    })),
                 ],
                 tool_calls: vec![ToolCall {
                     id: "x".to_string(),
@@ -551,10 +574,10 @@ mod durable_impl {
                 id: "response_id".to_string(),
                 content: vec![
                     ContentPart::Text("Hello".to_string()),
-                    ContentPart::Image(ImageUrl {
+                    ContentPart::Image(ImageReference::Url(ImageUrl {
                         url: "https://example.com/image.png".to_string(),
                         detail: Some(ImageDetail::High),
-                    }),
+                    })),
                 ],
                 tool_calls: vec![ToolCall {
                     id: "x".to_string(),
@@ -593,10 +616,22 @@ mod durable_impl {
                     Message {
                         role: Role::Assistant,
                         name: None,
-                        content: vec![ContentPart::Image(ImageUrl {
+                        content: vec![ContentPart::Image(ImageReference::Url(ImageUrl {
                             url: "https://example.com/image.png".to_string(),
                             detail: Some(ImageDetail::High),
-                        })],
+                        }))],
+                    },
+                    Message {
+                        role: Role::User,
+                        name: None,
+                        content: vec![
+                            ContentPart::Text("Analyze this image:".to_string()),
+                            ContentPart::Image(ImageReference::Inline(ImageSource {
+                                data: vec![0, 1, 2, 3, 4, 5],
+                                mime_type: "image/jpeg".to_string(),
+                                detail: None,
+                            })),
+                        ],
                     },
                 ],
                 config: Config {
