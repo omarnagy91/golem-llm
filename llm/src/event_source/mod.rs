@@ -39,6 +39,7 @@ pub struct EventSource {
 }
 
 impl EventSource {
+    #[allow(clippy::result_large_err)]
     pub fn new(response: Response) -> Result<Self, Error> {
         println!("EventSource::new");
         match check_response(response) {
@@ -123,6 +124,7 @@ impl EventSource {
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn check_response(response: Response) -> Result<Response, Error> {
     println!("EventSource->check_response");
     match response.status() {
