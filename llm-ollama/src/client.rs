@@ -3,18 +3,16 @@ use std::{fmt::Debug, fs, path::Path};
 use base64::{engine::general_purpose, Engine};
 use golem_llm::{
     error::{error_code_from_status, from_event_source_error},
-    event_source::{error, EventSource},
+    event_source::EventSource,
     golem::llm::llm::{Error, ErrorCode},
 };
 use log::trace;
-use mime_guess::MimeGuess;
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client, Method, Response, StatusCode,
 };
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::io::{BufRead, BufReader};
 use url::Url;
 
 pub struct OllamaApi {
@@ -311,7 +309,7 @@ pub fn handle_response<T: DeserializeOwned + Debug>(response: Response) -> Resul
 
             Err(Error {
                 code: error_code_from_status(status),
-                message: error_body.status.unwrap_or(String::new()),
+                message: error_body.status.unwrap_or_default(),
                 provider_error_json: error_body.error_message,
             })
         }
@@ -322,12 +320,12 @@ pub fn image_to_base64(source: &str) -> Result<String, Box<dyn std::error::Error
     let bytes = if Url::parse(source).is_ok() {
         let client = Client::new();
         let response = client.get(source).send()?;
-        let bytes = response.bytes()?.to_vec();
-        bytes
+
+        response.bytes()?.to_vec()
     } else {
         let path = Path::new(source);
-        let bytes = fs::read(path)?;
-        bytes
+
+        fs::read(path)?
     };
 
     let base64_data = general_purpose::STANDARD.encode(&bytes);

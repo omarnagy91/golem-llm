@@ -99,22 +99,18 @@ impl EventSource {
         }
 
         match &mut self.stream {
-            StreamType::EventStream( stream) => {
-                match stream.poll_next() {
-                    Poll::Ready(Some(Ok(event))) => Poll::Ready(Some(Ok(Event::Message(event)))),
-                    Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err.into()))),
-                    Poll::Ready(None) => Poll::Ready(None),
-                    Poll::Pending => Poll::Pending,
-                }
-            }
-            StreamType::NdJsonStream(stream) => {
-                match stream.poll_next() {
-                    Poll::Ready(Some(Ok(event))) => Poll::Ready(Some(Ok(Event::Message(event)))),
-                    Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err.into()))),
-                    Poll::Ready(None) => Poll::Ready(None),
-                    Poll::Pending => Poll::Pending,
-                }
-            }
+            StreamType::EventStream(stream) => match stream.poll_next() {
+                Poll::Ready(Some(Ok(event))) => Poll::Ready(Some(Ok(Event::Message(event)))),
+                Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err.into()))),
+                Poll::Ready(None) => Poll::Ready(None),
+                Poll::Pending => Poll::Pending,
+            },
+            StreamType::NdJsonStream(stream) => match stream.poll_next() {
+                Poll::Ready(Some(Ok(event))) => Poll::Ready(Some(Ok(Event::Message(event)))),
+                Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err.into()))),
+                Poll::Ready(None) => Poll::Ready(None),
+                Poll::Pending => Poll::Pending,
+            },
         }
     }
 }

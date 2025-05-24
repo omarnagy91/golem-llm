@@ -1,6 +1,6 @@
 use std::cell::{Ref, RefCell, RefMut};
 
-use client::{CompletionsRequest, CompletionsResponse, MessageRequest, OllamaApi};
+use client::{CompletionsRequest, OllamaApi};
 use conversions::{messages_to_request, process_response};
 use golem_llm::{
     chat_stream::{LlmChatStream, LlmChatStreamState},
@@ -14,7 +14,6 @@ use golem_llm::{
 };
 use golem_rust::wasm_rpc::Pollable;
 use log::trace;
-use serde_json::json;
 
 mod client;
 mod conversions;
@@ -162,11 +161,16 @@ impl LlmChatStreamState for OllamaChatStream {
             }
 
             return Ok(Some(StreamEvent::Delta(StreamDelta {
-                content: content.is_empty().then(|| None).unwrap_or(Some(content)),
-                tool_calls: tool_calls
-                    .is_empty()
-                    .then(|| None)
-                    .unwrap_or(Some(tool_calls)),
+                content: if content.is_empty() {
+                    None
+                } else {
+                    Some(content)
+                },
+                tool_calls: if tool_calls.is_empty() {
+                    None
+                } else {
+                    Some(tool_calls)
+                },
             })));
         }
         Ok(None)
@@ -202,7 +206,7 @@ impl Guest for OllamaComponent {
         LOGGING_STATE.with_borrow_mut(|state| state.init());
 
         let client = OllamaApi::new(config.model.clone());
-        match messages_to_request(messages, config.clone()) {
+        match messages_to_request(messages, config.clone(), None) {
             Ok(request) => Self::request(&client, request),
             Err(err) => ChatEvent::Error(err),
         }
@@ -214,8 +218,10 @@ impl Guest for OllamaComponent {
         config: Config,
     ) -> ChatEvent {
         LOGGING_STATE.with_borrow_mut(|state| state.init());
+
         let client = OllamaApi::new(config.model.clone());
-        match messages_to_request(messages, config.clone()) {
+
+        match messages_to_request(messages, config.clone(), Some(tool_results)) {
             Ok(request) => Self::request(&client, request),
             Err(err) => ChatEvent::Error(err),
         }
@@ -231,7 +237,7 @@ impl ExtendedGuest for OllamaComponent {
         LOGGING_STATE.with_borrow_mut(|state| state.init());
 
         let client = OllamaApi::new(config.model.clone());
-        match messages_to_request(messages, config.clone()) {
+        match messages_to_request(messages, config.clone(), None) {
             Ok(request) => Self::streaming_request(&client, request),
             Err(err) => OllamaChatStream::failed(err),
         }

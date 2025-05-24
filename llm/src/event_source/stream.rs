@@ -1,28 +1,27 @@
 use core::fmt;
 use std::{string::FromUtf8Error, task::Poll};
 
-use super::{event_stream::EventStream, ndjson_stream::NdJsonStream, utf8_stream::Utf8StreamError, MessageEvent};
+use super::{
+    event_stream::EventStream, ndjson_stream::NdJsonStream, utf8_stream::Utf8StreamError,
+    MessageEvent,
+};
 use golem_rust::{
     bindings::wasi::io::streams::{InputStream, StreamError as WasiStreamError},
     wasm_rpc::Pollable,
 };
 use nom::error::Error as NomError;
 
-
 pub enum StreamType {
     EventStream(EventStream),
     NdJsonStream(NdJsonStream),
 }
 
-
-
 pub trait Stream {
-     fn new(stream: InputStream) -> Self;
-     fn set_last_event_id(&mut self, id: impl Into<String>);
-     fn last_event_id(&self) -> &str;
-     fn subscribe(&self) -> Pollable;
-     fn poll_next(&mut self)
-        -> Poll<Option<Result<MessageEvent, StreamError<WasiStreamError>>>>;
+    fn new(stream: InputStream) -> Self;
+    fn set_last_event_id(&mut self, id: impl Into<String>);
+    fn last_event_id(&self) -> &str;
+    fn subscribe(&self) -> Pollable;
+    fn poll_next(&mut self) -> Poll<Option<Result<MessageEvent, StreamError<WasiStreamError>>>>;
 }
 
 /// Error thrown while parsing an event line

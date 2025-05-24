@@ -1,5 +1,5 @@
 use super::stream::{Stream, StreamError as NdJsonStreamError};
-use crate::event_source::utf8_stream::{Utf8Stream, Utf8StreamError};
+use crate::event_source::utf8_stream::Utf8Stream;
 use crate::event_source::MessageEvent;
 use golem_rust::bindings::wasi::io::streams::{InputStream, StreamError};
 use golem_rust::wasm_rpc::Pollable;
@@ -110,7 +110,9 @@ impl Stream for NdJsonStream {
 /// Returns Ok(Some(event)) if a complete line was found and parsed
 /// Returns Ok(None) if no complete line is available
 /// Returns Err if there was a parsing error
-fn try_parse_line( stream: &mut  NdJsonStream) -> Result<Option<MessageEvent>, NdJsonStreamError<StreamError>> {
+fn try_parse_line(
+    stream: &mut NdJsonStream,
+) -> Result<Option<MessageEvent>, NdJsonStreamError<StreamError>> {
     // Look for a complete line (ending with \n)
     if let Some(newline_pos) = stream.buffer.find('\n') {
         // Extract the line (without the newline)

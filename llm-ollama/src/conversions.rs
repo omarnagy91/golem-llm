@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::format,
-};
+use std::collections::HashMap;
 
 use crate::client::{
     image_to_base64, CompletionsRequest, CompletionsResponse, FunctionTool, MessageRequest,
@@ -9,20 +6,21 @@ use crate::client::{
 };
 use base64::{engine::general_purpose, Engine};
 use golem_llm::golem::llm::llm::{
-    ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason, ImageDetail,
-    ImageReference, Kv, Message, ResponseMetadata, Role, ToolCall as golem_llm_ToolCall,
-    ToolDefinition, ToolResult, Usage,
+    ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason,
+    ImageReference, Message, ResponseMetadata, Role, ToolCall as golem_llm_ToolCall, ToolResult,
+    Usage,
 };
 use log::trace;
 
 pub fn messages_to_request(
     messages: Vec<Message>,
     config: Config,
+    tool_results: Option<Vec<(golem_llm_ToolCall, ToolResult)>>,
 ) -> Result<CompletionsRequest, Error> {
     let options = config
         .provider_options
         .into_iter()
-        .map(|Kv| (Kv.key, Kv.value))
+        .map(|kv| (kv.key, kv.value))
         .collect::<HashMap<_, _>>();
 
     let mut request_message = Vec::new();
@@ -32,7 +30,7 @@ pub fn messages_to_request(
             Role::Assistant => MessageRole::Assistant,
             Role::System => MessageRole::System,
             Role::User => MessageRole::User,
-            Role::Tool => MessageRole::Tool,
+            Role::Tool => MessageRole::User, // Ollama treats tool results as user input
         };
 
         let mut message_content = String::new();
@@ -42,36 +40,42 @@ pub fn messages_to_request(
             match content_part {
                 ContentPart::Text(text) => {
                     if !message_content.is_empty() {
-                        message_content.push_str("\n");
+                        message_content.push('\n');
                     }
                     message_content.push_str(&text);
                 }
-                ContentPart::Image(refereance) => {
-                    match refereance {
-                        ImageReference::Url(image_url) => {
-                            let url = &image_url.url;
-                            match image_to_base64(url) {
-                                Ok(image) => attached_image.push(image),
-                                Err(err) => {
-                                    trace!("Failed to encode image: {url}\nError: {err}\n");
-                                }
+                ContentPart::Image(reference) => match reference {
+                    ImageReference::Url(image_url) => {
+                        let url = &image_url.url;
+                        match image_to_base64(url) {
+                            Ok(image) => attached_image.push(image),
+                            Err(err) => {
+                                trace!("Failed to encode image: {url}\nError: {err}\n");
                             }
                         }
-                        ImageReference::Inline(image_source) => {
-                            let base64_data = general_purpose::STANDARD.encode(&image_source.data);
-                            attached_image.push(base64_data);
-                        }
-                    };
-                }
+                    }
+                    ImageReference::Inline(image_source) => {
+                        let base64_data = general_purpose::STANDARD.encode(&image_source.data);
+                        attached_image.push(base64_data);
+                    }
+                },
             }
         }
 
         request_message.push(MessageRequest {
             content: message_content,
             role: message_role,
-            images: Some(attached_image),
+            images: if attached_image.is_empty() {
+                None
+            } else {
+                Some(attached_image)
+            },
             tools_calls: None,
         });
+    }
+
+    if let Some(tool_results) = tool_results {
+        request_message.extend(tool_results_to_messages(tool_results));
     }
 
     let mut tools = Vec::new();
@@ -84,7 +88,7 @@ pub fn messages_to_request(
         tools.push(Tool {
             tool_type: String::from("function"),
             function: FunctionTool {
-                description: tool.description.unwrap_or(String::new()),
+                description: tool.description.unwrap_or_default(),
                 name: tool.name,
                 parameters: param,
             },
@@ -122,11 +126,44 @@ pub fn messages_to_request(
         model: Some(config.model),
         messages: Some(request_message),
         tools: Some(tools),
-        format: options.get("format").map(|f| f.to_string()),
+        format: options.get("format").cloned(),
         options: Some(ollama_options),
-        keep_alive: options.get("keep_alive").map(|k| k.to_string()),
+        keep_alive: options.get("keep_alive").cloned(),
         stream: Some(false),
     })
+}
+
+fn tool_results_to_messages(
+    tool_results: Vec<(golem_llm_ToolCall, ToolResult)>,
+) -> Vec<MessageRequest> {
+    let mut messages = Vec::new();
+
+    for (tool_call, result) in tool_results {
+        let content = match result {
+            ToolResult::Success(success) => {
+                format!("[ToolCall Result]: Successed , [ToolCall ID]: {}, [ToolCall Name]: {}, [Result]: {}] ",success.id,success.name,success.result_json )
+            },
+            ToolResult::Error(error) => format!("[ToolCall Result]: Failed, [ToolCall ID]: {}, [ErrorName]: {}, [ErrorCode]: {}, [Error]: {}",error.id, error.name, error.error_code.unwrap_or_default(), error.error_message),
+        };
+        messages.push(MessageRequest {
+            role: MessageRole::Assistant,
+            // For better durability, we will add the tool call result in a structured format.
+            // This will help in retying and contnuing the interrupted conversation.
+            // This will help preventing branching conversations and repeating the tool call.
+            content,
+            images: None,
+            // This is the tool called by llm
+            tools_calls: Some(vec![Tool {
+                tool_type: String::from("function"),
+                function: FunctionTool {
+                    name: tool_call.name,
+                    description: String::new(),
+                    parameters: serde_json::json!({}),
+                },
+            }]),
+        });
+    }
+    messages
 }
 
 fn parse_option<T: std::str::FromStr>(options: &HashMap<String, String>, key: &str) -> Option<T> {
