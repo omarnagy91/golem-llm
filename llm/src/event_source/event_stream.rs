@@ -135,7 +135,6 @@ pub struct EventStream {
 impl Stream  for EventStream {
     /// Initialize the EventStream with a Stream
      fn new(stream: InputStream) -> Self {
-        println!("EventStream::new");
         Self {
             stream: Utf8Stream::new(stream),
             buffer: String::new(),
@@ -148,25 +147,21 @@ impl Stream  for EventStream {
     /// Set the last event ID of the stream. Useful for initializing the stream with a previous
     /// last event ID
      fn set_last_event_id(&mut self, id: impl Into<String>) {
-        println!("EventStream::set_last_event_id");
         self.last_event_id = id.into();
     }
 
     /// Get the last event ID of the stream
      fn last_event_id(&self) -> &str {
-        println!("EventStream::last_event_id");
         &self.last_event_id
     }
 
      fn subscribe(&self) -> Pollable {
-        println!("EventStream::subscribe");
         self.stream.subscribe()
     }
 
      fn poll_next(
         &mut self,
     ) -> Poll<Option<Result<MessageEvent, EventStreamError<StreamError>>>> {
-        println!("EventStream::poll_next buffer {} ", self.buffer.as_str());
         trace!("Polling for next event");
 
         match parse_event(&mut self.buffer, &mut self.builder) {

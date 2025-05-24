@@ -30,7 +30,6 @@ pub struct NdJsonStream {
 impl Stream for NdJsonStream {
     /// Initialize the NdJsonStream with a Stream
     fn new(stream: InputStream) -> Self {
-        println!("NdJsonStream::new");
         Self {
             stream: Utf8Stream::new(stream),
             buffer: String::new(),
@@ -41,23 +40,19 @@ impl Stream for NdJsonStream {
 
     /// Set the last event ID of the stream
     fn set_last_event_id(&mut self, id: impl Into<String>) {
-        println!("NdJsonStream::set_last_event_id");
         self.last_event_id = id.into();
     }
 
     /// Get the last event ID of the stream
     fn last_event_id(&self) -> &str {
-        println!("NdJsonStream::last_event_id");
         &self.last_event_id
     }
 
     fn subscribe(&self) -> Pollable {
-        println!("NdJsonStream::subscribe");
         self.stream.subscribe()
     }
 
     fn poll_next(&mut self) -> Poll<Option<Result<MessageEvent, NdJsonStreamError<StreamError>>>> {
-        println!("NdJsonStream::poll_next buffer: '{}'", self.buffer);
         trace!("Polling for next NDJSON event");
 
         // Try to parse a complete line from the current buffer

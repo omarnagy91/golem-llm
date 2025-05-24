@@ -25,7 +25,6 @@ pub struct OllamaApi {
 
 impl OllamaApi {
     pub fn new(default_model: String) -> Self {
-        println!("OllamaApi::new");
         let base_url =
             std::env::var("GOLEM_OLLAMA_BASE_URL").unwrap_or("http://localhost:11434".to_string());
         let client = Client::builder()
@@ -39,7 +38,6 @@ impl OllamaApi {
     }
 
     pub fn send_chat(&self, params: CompletionsRequest) -> Result<CompletionsResponse, Error> {
-        println!("OllamaApi:: send_chat");
         trace!("Sending request to Ollama API: {params:?}");
 
         let mut modified_params = params;
@@ -64,7 +62,6 @@ impl OllamaApi {
     }
 
     pub fn send_chat_stream(&self, params: CompletionsRequest) -> Result<EventSource, Error> {
-        println!("OllamaApi::send_chat_stream");
         trace!("Sending request to Ollama API: {params:?}");
 
         let mut modified_params = params;
@@ -91,8 +88,6 @@ impl OllamaApi {
             .body(json_body)
             .send()
             .map_err(|err| from_reqwest_error("Request failed", err))?;
-        println!("Initializing NDJSON EventSource stream");
-        println!("Response: {:?}", response);
         EventSource::new(response)
             .map_err(|err| from_event_source_error("Failed to create EventSource stream", err))
     }
@@ -156,7 +151,7 @@ pub struct OllamaModelOptions {
 /// ChatRequest is parameters for a request to the chat endpoint
 ///
 /// Refer to https://github.com/ollama/ollama/blob/main/docs/api.md#generate-a-chat-completion for more details
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CompletionsRequest {
     /// If NONE then the default model will be used.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -184,7 +179,14 @@ pub struct CompletionsRequest {
     pub keep_alive: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Format {
+    #[serde(rename = "type")]
+    pub format_type: String,
+    pub properties: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MessageRequest {
     pub role: MessageRole,
     pub content: String,
@@ -194,13 +196,13 @@ pub struct MessageRequest {
     pub tools_calls: Option<Vec<Tool>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Tool {
     #[serde(rename = "type")]
     pub tool_type: String,
     pub function: FunctionTool,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FunctionTool {
     pub name: String,
     pub description: String,
@@ -255,8 +257,8 @@ pub struct MessageResponse {
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ToolCall {
-    pub id: String,
-    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function: Option<Function>,
 }
@@ -267,7 +269,7 @@ pub struct Function {
     pub arguments: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OllamaRequestError {
     status_code: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -284,7 +286,6 @@ pub fn handle_response<T: DeserializeOwned + Debug>(response: Response) -> Resul
             let raw_body = response
                 .text()
                 .map_err(|err| from_reqwest_error("Failed to receive response body", err))?;
-            println!("Received response from ollama API: {:?}", &raw_body);
 
             match serde_json::from_str::<T>(&raw_body) {
                 Ok(body) => Ok(body),
@@ -318,28 +319,19 @@ pub fn handle_response<T: DeserializeOwned + Debug>(response: Response) -> Resul
 }
 
 pub fn image_to_base64(source: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let (bytes, mime_type) = if Url::parse(source).is_ok() {
+    let bytes = if Url::parse(source).is_ok() {
         let client = Client::new();
         let response = client.get(source).send()?;
-        let mime_type = response
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("image/png")
-            .to_string();
         let bytes = response.bytes()?.to_vec();
-        (bytes, mime_type)
+        bytes
     } else {
         let path = Path::new(source);
         let bytes = fs::read(path)?;
-        let mime_type = MimeGuess::from_path(path)
-            .first_or_octet_stream()
-            .to_string();
-        (bytes, mime_type)
+        bytes
     };
 
     let base64_data = general_purpose::STANDARD.encode(&bytes);
-    Ok(format!("data:{};base64,{}", mime_type, base64_data))
+    Ok(base64_data)
 }
 
 pub fn from_reqwest_error(context: &str, err: reqwest::Error) -> Error {

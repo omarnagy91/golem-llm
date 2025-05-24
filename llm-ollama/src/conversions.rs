@@ -1,13 +1,17 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::format,
+};
 
 use crate::client::{
     image_to_base64, CompletionsRequest, CompletionsResponse, FunctionTool, MessageRequest,
     MessageRole, OllamaModelOptions, Tool,
 };
+use base64::{engine::general_purpose, Engine};
 use golem_llm::golem::llm::llm::{
     ChatEvent, CompleteResponse, Config, ContentPart, Error, ErrorCode, FinishReason, ImageDetail,
-    Message, ResponseMetadata, Role, ToolCall as golem_llm_ToolCall, ToolDefinition, ToolResult,
-    Usage,
+    ImageReference, Kv, Message, ResponseMetadata, Role, ToolCall as golem_llm_ToolCall,
+    ToolDefinition, ToolResult, Usage,
 };
 use log::trace;
 
@@ -42,14 +46,22 @@ pub fn messages_to_request(
                     }
                     message_content.push_str(&text);
                 }
-                ContentPart::Image(image_url) => {
-                    let url = &image_url.url;
-                    match image_to_base64(url) {
-                        Ok(image) => attached_image.push(image),
-                        Err(err) => {
-                            trace!("Failed to encode image: {url}\nError: {err}\n");
+                ContentPart::Image(refereance) => {
+                    match refereance {
+                        ImageReference::Url(image_url) => {
+                            let url = &image_url.url;
+                            match image_to_base64(url) {
+                                Ok(image) => attached_image.push(image),
+                                Err(err) => {
+                                    trace!("Failed to encode image: {url}\nError: {err}\n");
+                                }
+                            }
                         }
-                    }
+                        ImageReference::Inline(image_source) => {
+                            let base64_data = general_purpose::STANDARD.encode(&image_source.data);
+                            attached_image.push(base64_data);
+                        }
+                    };
                 }
             }
         }
@@ -122,27 +134,22 @@ fn parse_option<T: std::str::FromStr>(options: &HashMap<String, String>, key: &s
 }
 
 pub fn process_response(response: CompletionsResponse) -> ChatEvent {
-    if response.message.is_some() {
-        let mut chat_events = Vec::<golem_llm_ToolCall>::new();
-        let message = response.message.unwrap();
-        if message.tool_calls.is_some() {
-            for tool_call in message.tool_calls.clone().unwrap() {
-                chat_events.push(golem_llm_ToolCall {
-                    id: tool_call.id,
-                    name: tool_call.name,
-                    arguments_json: tool_call.function.unwrap().arguments.to_string(),
+    if let Some(ref message) = response.message {
+        let mut content = Vec::<ContentPart>::new();
+        let mut tool_calls = Vec::<golem_llm_ToolCall>::new();
+
+        if let Some(ref message_content) = message.content {
+            content.push(ContentPart::Text(message_content.clone()));
+        }
+
+        if let Some(ref message_tool_calls) = message.tool_calls {
+            for tool_call in message_tool_calls {
+                tool_calls.push(golem_llm_ToolCall {
+                    id: format!("ollama-{}", response.created_at.clone()),
+                    name: tool_call.name.clone().unwrap_or_default(),
+                    arguments_json: tool_call.function.as_ref().unwrap().arguments.to_string(),
                 });
             }
-        }
-
-        if chat_events.len() > 0 {
-            return ChatEvent::ToolRequest(chat_events);
-        }
-
-        let mut content = Vec::new();
-
-        if message.content.is_some() {
-            content.push(ContentPart::Text(message.content.unwrap()));
         }
 
         let finish_reason = if response.done.unwrap_or(false) {
@@ -150,11 +157,13 @@ pub fn process_response(response: CompletionsResponse) -> ChatEvent {
         } else {
             None
         };
+        let input_tokens = response.prompt_eval_count.map(|c| c as u32);
+        let output_tokens = response.eval_count.map(|c| c as u32);
 
         let usage = Usage {
-            input_tokens: response.prompt_eval_count.map(|c| c as u32),
-            output_tokens: response.eval_count.map(|c| c as u32),
-            total_tokens: None,
+            input_tokens,
+            output_tokens,
+            total_tokens: Some(input_tokens.unwrap_or(0) + output_tokens.unwrap_or(0)),
         };
 
         let timestamp = response.created_at.clone();
@@ -162,15 +171,15 @@ pub fn process_response(response: CompletionsResponse) -> ChatEvent {
         let metadata = ResponseMetadata {
             finish_reason,
             usage: Some(usage),
-            provider_id: None,
+            provider_id: Some("ollama".to_string()),
             timestamp: Some(timestamp.clone()),
-            provider_metadata_json: None,
+            provider_metadata_json: Some(get_provider_metadata(&response)),
         };
 
         ChatEvent::Message(CompleteResponse {
             id: format!("ollama-{}", timestamp),
             content,
-            tool_calls: Vec::new(),
+            tool_calls,
             metadata,
         })
     } else {
@@ -182,5 +191,19 @@ pub fn process_response(response: CompletionsResponse) -> ChatEvent {
     }
 }
 
-
-
+pub fn get_provider_metadata(response: &CompletionsResponse) -> String {
+    format!(
+        r#"{{
+    "total_duration":"{}",
+    "load_duration":"{}",
+    "prompt_eval_duration":{},
+    "eval_duration":{},
+    "context":{},
+    }}"#,
+        response.total_duration.unwrap_or(0),
+        response.load_duration.unwrap_or(0),
+        response.prompt_eval_duration.unwrap_or(0),
+        response.eval_duration.unwrap_or(0),
+        response.eval_count.unwrap_or(0)
+    )
+}

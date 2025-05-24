@@ -8,12 +8,13 @@ use golem_llm::{
     event_source::EventSource,
     golem::llm::llm::{
         ChatEvent, ChatStream, Config, ContentPart, Error, FinishReason, Guest, Message,
-        ResponseMetadata, Role, StreamDelta, StreamEvent, ToolCall, ToolResult,
+        ResponseMetadata, Role, StreamDelta, StreamEvent, ToolCall, ToolResult, Usage,
     },
     LOGGING_STATE,
 };
 use golem_rust::wasm_rpc::Pollable;
 use log::trace;
+use serde_json::json;
 
 mod client;
 mod conversions;
@@ -26,7 +27,6 @@ struct OllamaChatStream {
 
 impl OllamaChatStream {
     pub fn new(stream: EventSource) -> LlmChatStream<Self> {
-        println!("OllamaChatStream::new");
         LlmChatStream::new(OllamaChatStream {
             stream: RefCell::new(Some(stream)),
             failure: None,
@@ -35,7 +35,6 @@ impl OllamaChatStream {
     }
 
     pub fn failed(error: Error) -> LlmChatStream<Self> {
-        println!("OllamaChatStream::failed");
         LlmChatStream::new(OllamaChatStream {
             stream: RefCell::new(None),
             failure: Some(error),
@@ -46,71 +45,138 @@ impl OllamaChatStream {
 
 impl LlmChatStreamState for OllamaChatStream {
     fn failure(&self) -> &Option<Error> {
-        println!("OllamaChatStream::failure");
         &self.failure
     }
     fn is_finished(&self) -> bool {
-        println!("OllamaChatStream::is_finished");
         *self.finished.borrow()
     }
 
     fn set_finished(&self) {
-        println!("OllamaChatStream::set_finished");
         *self.finished.borrow_mut() = true;
     }
 
     fn stream(&self) -> Ref<Option<EventSource>> {
-        println!("OllamaChatStream::stream");
         self.stream.borrow()
     }
 
     fn stream_mut(&self) -> RefMut<Option<EventSource>> {
-        println!("OllamaChatStream::stream_mut");
         self.stream.borrow_mut()
     }
 
     fn decode_message(&self, raw: &str) -> Result<Option<StreamEvent>, String> {
-        println!("OllamaChatStream::decode_message");
         trace!("Parsing NDJSON line: {raw}");
-        let json: serde_json::Value = serde_json::from_str(raw.trim())
-            .map_err(|e| format!("JSON parse error: {e}"))?;
+        let json: serde_json::Value =
+            serde_json::from_str(raw.trim()).map_err(|e| format!("JSON parse error: {e}"))?;
 
         if json.get("done").and_then(|v| v.as_bool()).unwrap_or(false) {
+            let input_tokens = json
+                .get("prompt_eval_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+            let output_tokens = json.get("eval_count").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let timestamp = json
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let usage = Usage {
+                input_tokens: Some(input_tokens),
+                output_tokens: Some(input_tokens),
+                total_tokens: Some(input_tokens + output_tokens),
+            };
+
+            let total_duration = json
+                .get("total_duration")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let load_duration = json
+                .get("load_duration")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let prompt_eval_duration = json
+                .get("prompt_eval_duration")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let eval_duration = json
+                .get("eval_duration")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let context = json
+                .get("context")
+                .cloned()
+                .unwrap_or(serde_json::json!(null));
+
+            let provider_metadata = serde_json::json!({
+                "total_duration": total_duration,
+                "load_duration": load_duration,
+                "prompt_eval_duration": prompt_eval_duration,
+                "eval_duration": eval_duration,
+                "context": context
+            })
+            .to_string();
+
             return Ok(Some(StreamEvent::Finish(ResponseMetadata {
                 finish_reason: Some(FinishReason::Stop),
-                usage: None,
-                provider_id: None,
-                timestamp: None,
-                provider_metadata_json: None,
+                usage: Some(usage),
+                provider_id: Some("ollama".to_string()),
+                timestamp,
+                provider_metadata_json: Some(provider_metadata),
             })));
         }
 
         if let Some(message) = json.get("message") {
             let mut content = Vec::new();
+            let mut tool_calls = Vec::new();
 
             if let Some(text) = message.get("content").and_then(|c| c.as_str()) {
                 if !text.is_empty() {
                     content.push(ContentPart::Text(text.to_string()));
                 }
             }
-            if !content.is_empty() {
-                return Ok(Some(StreamEvent::Delta(StreamDelta {
-                    content: Some(content),
-                    tool_calls: None,
-                })));
+
+            if let Some(calls) = message.get("tool_calls").and_then(|tc| tc.as_array()) {
+                for call in calls {
+                    if let Some(function) = call.get("function") {
+                        let name = function
+                            .get("name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or_default()
+                            .to_string();
+                        let args_json = function
+                            .get("arguments")
+                            .cloned()
+                            .unwrap_or(serde_json::json!({}));
+                        let id = format!(
+                            "ollama-{}",
+                            json.get("created_at")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                                .unwrap_or_default()
+                        );
+                        tool_calls.push(ToolCall {
+                            id,
+                            name,
+                            arguments_json: args_json.to_string(),
+                        });
+                    }
+                }
             }
+
+            return Ok(Some(StreamEvent::Delta(StreamDelta {
+                content: content.is_empty().then(|| None).unwrap_or(Some(content)),
+                tool_calls: tool_calls
+                    .is_empty()
+                    .then(|| None)
+                    .unwrap_or(Some(tool_calls)),
+            })));
         }
         Ok(None)
     }
-
-
 }
 
 struct OllamaComponent;
 
 impl OllamaComponent {
     fn request(client: &OllamaApi, request: CompletionsRequest) -> ChatEvent {
-        println!("OllamaComponent::request");
         match client.send_chat(request) {
             Ok(response) => process_response(response),
             Err(err) => ChatEvent::Error(err),
@@ -121,7 +187,6 @@ impl OllamaComponent {
         client: &OllamaApi,
         mut request: CompletionsRequest,
     ) -> LlmChatStream<OllamaChatStream> {
-        println!("OllamaComponent::streaming_request");
         request.stream = Some(true);
         match client.send_chat_stream(request) {
             Ok(stream) => OllamaChatStream::new(stream),
@@ -134,7 +199,6 @@ impl Guest for OllamaComponent {
     type ChatStream = LlmChatStream<OllamaChatStream>;
 
     fn send(messages: Vec<Message>, config: Config) -> ChatEvent {
-        println!("OllamaComponent::send");
         LOGGING_STATE.with_borrow_mut(|state| state.init());
 
         let client = OllamaApi::new(config.model.clone());
@@ -149,7 +213,6 @@ impl Guest for OllamaComponent {
         tool_results: Vec<(ToolCall, ToolResult)>,
         config: Config,
     ) -> ChatEvent {
-        println!("OllamaComponent::continue_");
         LOGGING_STATE.with_borrow_mut(|state| state.init());
         let client = OllamaApi::new(config.model.clone());
         match messages_to_request(messages, config.clone()) {
@@ -159,14 +222,12 @@ impl Guest for OllamaComponent {
     }
 
     fn stream(messages: Vec<Message>, config: Config) -> ChatStream {
-        println!("OllamaComponent::stream");
         ChatStream::new(Self::unwrapped_stream(messages, config.clone()))
     }
 }
 
 impl ExtendedGuest for OllamaComponent {
     fn unwrapped_stream(messages: Vec<Message>, config: Config) -> LlmChatStream<OllamaChatStream> {
-        println!("OllamaComponent::unwrapped_stream");
         LOGGING_STATE.with_borrow_mut(|state| state.init());
 
         let client = OllamaApi::new(config.model.clone());
@@ -177,7 +238,6 @@ impl ExtendedGuest for OllamaComponent {
     }
 
     fn retry_prompt(original_messages: &[Message], partial_result: &[StreamDelta]) -> Vec<Message> {
-        println!("OllamaComponent::retry_prompt");
         let mut extended_messages = Vec::new();
 
         extended_messages.push(Message {
@@ -231,7 +291,6 @@ impl ExtendedGuest for OllamaComponent {
     }
 
     fn subscribe(stream: &Self::ChatStream) -> Pollable {
-        println!("OllamaComponent::subscribe");
         stream.subscribe()
     }
 }

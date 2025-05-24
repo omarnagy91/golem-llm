@@ -38,7 +38,6 @@ pub enum StreamError<E> {
 
 impl<E> From<Utf8StreamError<E>> for StreamError<E> {
     fn from(err: Utf8StreamError<E>) -> Self {
-        println!("StreamError::from");
         match err {
             Utf8StreamError::Utf8(err) => Self::Utf8(err),
             Utf8StreamError::Transport(err) => Self::Transport(err),
@@ -48,7 +47,6 @@ impl<E> From<Utf8StreamError<E>> for StreamError<E> {
 
 impl<E> From<NomError<&str>> for StreamError<E> {
     fn from(err: NomError<&str>) -> Self {
-        println!("StreamError::from");
         StreamError::Parser(NomError::new(err.input.to_string(), err.code))
     }
 }
@@ -58,7 +56,6 @@ where
     E: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        println!("StreamError::fmt");
         match self {
             Self::Utf8(err) => f.write_fmt(format_args!("UTF8 error: {}", err)),
             Self::Parser(err) => f.write_fmt(format_args!("Parse error: {}", err)),

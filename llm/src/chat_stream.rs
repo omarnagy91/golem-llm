@@ -19,12 +19,10 @@ pub struct LlmChatStream<T> {
 
 impl<T: LlmChatStreamState> LlmChatStream<T> {
     pub fn new(implementation: T) -> Self {
-        println!("LlmChatStream::new");
         Self { implementation }
     }
 
     pub fn subscribe(&self) -> Pollable {
-        println!("LlmChatStream::subscribe");
         if let Some(stream) = self.implementation.stream().as_ref() {
             stream.subscribe()
         } else {
@@ -35,7 +33,6 @@ impl<T: LlmChatStreamState> LlmChatStream<T> {
 
 impl<T: LlmChatStreamState> GuestChatStream for LlmChatStream<T> {
     fn get_next(&self) -> Option<Vec<StreamEvent>> {
-        println!("LlmChatStream::get_next");
         if self.implementation.is_finished() {
             return Some(vec![]);
         }
@@ -102,7 +99,6 @@ impl<T: LlmChatStreamState> GuestChatStream for LlmChatStream<T> {
     }
 
     fn blocking_get_next(&self) -> Vec<StreamEvent> {
-        println!("LlmChatStream::blocking_get_next");
         let pollable = self.subscribe();
         let mut result = Vec::new();
         loop {
