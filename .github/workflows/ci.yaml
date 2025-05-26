@@ -127,14 +127,12 @@ jobs:
         run: |
           set -e
           echo "Installing Golem server"
-          url=$(curl -s https://api.github.com/repos/golemcloud/golem-cli/releases/latest \
-            | grep "browser_download_url.*x86_64-unknown-linux-gnu" \
-            | cut -d '"' -f 4)
-          sudo curl -L "$url" -o /usr/local/bin/golem
-          sudo chmod +x /usr/local/bin/golem
+          sudo curl -L https://github.com/golemcloud/golem-cli/releases/download/v1.2.3/golem-x86_64-unknown-linux-gnu -o ./golem
+          sudo chmod +x ./golem
+          sudo mv ./golem /usr/local/bin/golem
+          golem --version
           golem profile switch local
-          golem server run &
-          timeout 60 bash -c 'until curl -sf http://localhost:9881; do sleep 2; done'
+          nohup golem server run >golem-server.log 2>&1 &
           echo "Golem server started." 
       - name: Build and test Ollama integration
         run: |
