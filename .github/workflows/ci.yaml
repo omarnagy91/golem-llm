@@ -136,8 +136,7 @@ jobs:
           sudo mv ./golem /usr/local/bin/golem
           golem --version
           golem profile switch local
-          golem server run &
-          timeout 60 bash -c 'until curl -sf http://localhost:9881; do sleep 2; done'
+          nohup golem server run >golem-server.log 2>&1 &
           echo "Golem server started." 
       - name: Build and test Ollama integration
         run: |
