@@ -17,7 +17,7 @@ use ndjson_stream::NdJsonStream;
 use reqwest::header::HeaderValue;
 use reqwest::{Response, StatusCode};
 use std::task::Poll;
-use stream::{Stream, StreamType};
+use stream::{LlmStream, StreamType};
 
 /// The ready state of an [`EventSource`]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]

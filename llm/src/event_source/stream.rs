@@ -16,7 +16,7 @@ pub enum StreamType {
     NdJsonStream(NdJsonStream),
 }
 
-pub trait Stream {
+pub trait LlmStream {
     fn new(stream: InputStream) -> Self;
     fn set_last_event_id(&mut self, id: impl Into<String>);
     fn last_event_id(&self) -> &str;

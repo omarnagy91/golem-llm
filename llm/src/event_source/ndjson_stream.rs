@@ -1,4 +1,4 @@
-use super::stream::{Stream, StreamError as NdJsonStreamError};
+use super::stream::{LlmStream, StreamError as NdJsonStreamError};
 use crate::event_source::utf8_stream::Utf8Stream;
 use crate::event_source::MessageEvent;
 use golem_rust::bindings::wasi::io::streams::{InputStream, StreamError};
@@ -27,7 +27,7 @@ pub struct NdJsonStream {
     last_event_id: String,
 }
 
-impl Stream for NdJsonStream {
+impl LlmStream for NdJsonStream {
     /// Initialize the NdJsonStream with a Stream
     fn new(stream: InputStream) -> Self {
         Self {

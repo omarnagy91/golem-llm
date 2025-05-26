@@ -7,7 +7,7 @@ use golem_rust::wasm_rpc::Pollable;
 use log::trace;
 use std::task::Poll;
 
-use super::stream::{Stream, StreamError as EventStreamError};
+use super::stream::{LlmStream, StreamError as EventStreamError};
 
 #[derive(Default, Debug)]
 struct EventBuilder {
@@ -132,7 +132,7 @@ pub struct EventStream {
     last_event_id: String,
 }
 
-impl Stream for EventStream {
+impl LlmStream for EventStream {
     /// Initialize the EventStream with a Stream
     fn new(stream: InputStream) -> Self {
         Self {
