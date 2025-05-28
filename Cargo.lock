@@ -835,7 +835,7 @@ checksum = "74765f6d916ee2faa39bc8e68e4f3ed8949b48cccdac59983d287a7cb71ce9c5"
 [[package]]
 name = "reqwest"
 version = "0.12.15"
-source = "git+https://github.com/golemcloud/reqwest?branch=update-april-2025#0c40171e4c3f2c5f63183ca70a7b28ade23ed00f"
+source = "git+https://github.com/golemcloud/reqwest?branch=update-may-2025#34a8764338211c3efc5086fcfdfe87ba50e1b271"
 dependencies = [
  "base64 0.22.1",
  "bytes",
