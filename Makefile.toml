@@ -17,7 +17,6 @@ run_task = { name = ["build-llm"] }
 run_task = { name = ["release-build-llm"] }
 
 [tasks.build-portable]
-install_crate = "cargo-binstall"
 run_task = { name = ["build-llm-portable"] }
 
 [tasks.release-build-portable]
