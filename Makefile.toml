@@ -100,11 +100,11 @@ args = ["make", "--cwd", "llm", "build-portable"]
 
 [tasks.release-build-llm]
 command = "cargo"
-args = ["make", "--cwd", "llm", "build"]
+args = ["make", "--cwd", "llm", "release-build"]
 
 [tasks.release-build-llm-portable]
 command = "cargo"
-args = ["make", "--cwd", "llm", "build-portable"]
+args = ["make", "--cwd", "llm", "release-build-portable"]
 
 [tasks.llm-wit]
 command = "cargo"
