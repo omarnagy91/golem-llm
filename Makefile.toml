@@ -120,7 +120,20 @@ cm_run_task copy-release-artifacts --portable
 
 [tasks.build-test-components]
 description = "Builds all test components with golem-cli"
-run_task = { name = ["llm-build-test-components"] }
+script_runner = "@shell"
+script = '''
+domains=(llm)
+
+# if there is no domain passed run for every domain
+if [ -z $1 ]; then
+    for domain in ${domains[@]};
+    do
+        cargo make --cwd $domain build-test-components;
+    done
+else
+    cargo make --cwd $1 build-test-components
+fi
+'''
 
 [tasks.copy-debug-artifacts]
 script_runner = "@duckscript"
