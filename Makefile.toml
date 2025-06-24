@@ -11,19 +11,84 @@ command = "cargo"
 args = ["test"]
 
 [tasks.build]
-run_task = { name = ["build-llm"] }
+script_runner = "@shell"
+script = '''
+domains=(llm)
+
+# if there is no domain passed run for every domain
+if [ -z $1 ]; then
+    for domain in ${domains[@]};
+    do
+        cargo make --cwd $domain build;
+    done
+else
+    cargo make --cwd $1 build
+fi
+'''
 
 [tasks.release-build]
-run_task = { name = ["release-build-llm"] }
+script_runner = "@shell"
+script = '''
+domains=(llm)
+
+# if there is no domain passed run for every domain
+if [ -z $1 ]; then
+    for domain in ${domains[@]};
+    do
+        cargo make --cwd $domain release-build;
+    done
+else
+    cargo make --cwd $1 release-build
+fi
+'''
 
 [tasks.build-portable]
-run_task = { name = ["build-llm-portable"] }
+script_runner = "@shell"
+script = '''
+domains=(llm)
+
+# if there is no domain passed run for every domain
+if [ -z $1 ]; then
+    for domain in ${domains[@]};
+    do
+        cargo make --cwd $domain build-portable;
+    done
+else
+    cargo make --cwd $1 build-portable
+fi
+'''
 
 [tasks.release-build-portable]
-run_task = { name = ["release-build-llm-portable"] }
+script_runner = "@shell"
+script = '''
+domains=(llm)
+
+# if there is no domain passed run for every domain
+if [ -z $1 ]; then
+    for domain in ${domains[@]};
+    do
+        cargo make --cwd $domain release-build-portable;
+    done
+else
+    cargo make --cwd $1 release-build-portable
+fi
+'''
 
 [tasks.wit]
-run_task = { name = ["llm-wit"] }
+script_runner = "@shell"
+script = '''
+domains=(llm)
+
+# if there is no domain passed run for every domain
+if [ -z $1 ]; then
+    for domain in ${domains[@]};
+    do
+        cargo make --cwd $domain wit;
+    done
+else
+    cargo make --cwd $1 wit
+fi
+'''
 
 [tasks.build-all]
 script_runner = "@duckscript"
@@ -88,31 +153,6 @@ for target in ${targets}
     end
 end
 '''
-
-# Tasks for llm module
-[tasks.build-llm]
-command = "cargo"
-args = ["make", "--cwd", "llm", "build"]
-
-[tasks.build-llm-portable]
-command = "cargo"
-args = ["make", "--cwd", "llm", "build-portable"]
-
-[tasks.release-build-llm]
-command = "cargo"
-args = ["make", "--cwd", "llm", "release-build"]
-
-[tasks.release-build-llm-portable]
-command = "cargo"
-args = ["make", "--cwd", "llm", "release-build-portable"]
-
-[tasks.llm-wit]
-command = "cargo"
-args = ["make", "--cwd", "llm", "wit"]
-
-[tasks.llm-build-test-components]
-command = "cargo"
-args = ["make", "--cwd", "llm", "build-test-components"]
 
 # Maintenance tasks
 [tasks.check]
