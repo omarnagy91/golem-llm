@@ -11,83 +11,96 @@ command = "cargo"
 args = ["test"]
 
 [tasks.build]
-script_runner = "@shell"
+script_runner = "@duckscript"
 script = '''
-domains=(llm)
+domains = array llm
 
 # if there is no domain passed run for every domain
-if [ -z $1 ]; then
-    for domain in ${domains[@]};
-    do
-        cargo make --cwd $domain build;
-    done
+if is_empty ${1}
+    for domain in ${domains}
+        exec cargo make --cwd ${domain} build
+    end
 else
-    cargo make --cwd $1 build
-fi
+    exec cargo make --cwd ${1} build
+end
 '''
 
 [tasks.release-build]
-script_runner = "@shell"
+script_runner = "@duckscript"
 script = '''
-domains=(llm)
+domains = array llm
 
 # if there is no domain passed run for every domain
-if [ -z $1 ]; then
-    for domain in ${domains[@]};
-    do
-        cargo make --cwd $domain release-build;
-    done
+if is_empty ${1}
+    for domain in ${domains}
+        exec cargo make --cwd ${domain} release-build
+    end
 else
-    cargo make --cwd $1 release-build
-fi
+    exec cargo make --cwd ${1} release-build
+end
 '''
 
 [tasks.build-portable]
-script_runner = "@shell"
+script_runner = "@duckscript"
 script = '''
-domains=(llm)
+#!/bin/bash
+domains = array llm
 
 # if there is no domain passed run for every domain
-if [ -z $1 ]; then
-    for domain in ${domains[@]};
-    do
-        cargo make --cwd $domain build-portable;
-    done
+if is_empty ${1}
+    for domain in ${domains}
+        exec cargo make --cwd ${domain} build-portable
+    end
 else
-    cargo make --cwd $1 build-portable
-fi
+    exec cargo make --cwd ${1} build-portable
+end
 '''
 
 [tasks.release-build-portable]
-script_runner = "@shell"
+script_runner = "@duckscript"
 script = '''
-domains=(llm)
+#!/bin/bash
+domains = array llm
 
 # if there is no domain passed run for every domain
-if [ -z $1 ]; then
-    for domain in ${domains[@]};
-    do
-        cargo make --cwd $domain release-build-portable;
-    done
+if is_empty ${1}
+    for domain in ${domains}
+        exec cargo make --cwd ${domain} release-build-portable
+    end
 else
-    cargo make --cwd $1 release-build-portable
-fi
+    exec cargo make --cwd ${1} release-build-portable
+end
 '''
 
 [tasks.wit]
-script_runner = "@shell"
+script_runner = "@duckscript"
 script = '''
-domains=(llm)
+domains = array llm
 
 # if there is no domain passed run for every domain
-if [ -z $1 ]; then
-    for domain in ${domains[@]};
-    do
-        cargo make --cwd $domain wit;
-    done
+if is_empty ${1}
+    for domain in ${domains}
+        exec cargo make --cwd ${domain} wit
+    end
 else
-    cargo make --cwd $1 wit
-fi
+    exec cargo make --cwd ${1} wit
+end
+'''
+
+[tasks.build-test-components]
+description = "Builds all test components with golem-cli"
+script_runner = "@duckscript"
+script = '''
+domains = array llm
+
+# if there is no domain passed run for every domain
+if is_empty ${1}
+    for domain in ${domains}
+        exec cargo make --cwd ${domain} build-test-components
+    end
+else
+    exec cargo make --cwd ${1} build-test-components
+end
 '''
 
 [tasks.build-all]
@@ -116,23 +129,6 @@ cm_run_task copy-release-artifacts
 cm_run_task clean
 cm_run_task release-build-portable
 cm_run_task copy-release-artifacts --portable
-'''
-
-[tasks.build-test-components]
-description = "Builds all test components with golem-cli"
-script_runner = "@shell"
-script = '''
-domains=(llm)
-
-# if there is no domain passed run for every domain
-if [ -z $1 ]; then
-    for domain in ${domains[@]};
-    do
-        cargo make --cwd $domain build-test-components;
-    done
-else
-    cargo make --cwd $1 build-test-components
-fi
 '''
 
 [tasks.copy-debug-artifacts]
