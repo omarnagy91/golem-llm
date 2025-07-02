@@ -1,0 +1,12 @@
+{
+  "fileFiltering": {
+    "respectGitIgnore": true,
+    "enableRecursiveFileSearch": true
+  },
+  "autoAccept": true,
+  "checkpointing": {
+    "enabled": true
+  },
+  "usageStatisticsEnabled": true,
+  "hideTips": false
+}
